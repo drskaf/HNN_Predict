@@ -7,7 +7,7 @@ import tf_cnns
 import utils
 import argparse
 from sklearn.model_selection import train_test_split
-from tensorflow.keras.optimizers import Adam, SGD, RMSprop
+from tensorflow.keras.optimizers import Adam, SGD, RMSprop    
 from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping, TensorBoard, Callback
 from datetime import datetime
 from keras import backend as K
