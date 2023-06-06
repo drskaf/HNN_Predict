@@ -252,7 +252,7 @@ plt.plot(history.history['val_loss'])
 plt.title('Mortality CNN training')
 plt.ylabel('accuracy_loss')
 plt.xlabel('epoch')
-plt.legend(['train accuracy', 'validation accuracy', 'train loss', 'validation loss'], loc='upper left')
+plt.legend(['train accuracy', 'validation accuracy', 'train loss', 'validation loss'], loc='upper right')
 plt.show()
 
 # Saving model data
