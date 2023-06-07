@@ -37,7 +37,7 @@ NUM_EPOCHS = 500
 N_CLASSES = 1
 CHECKPOINT_PATH = os.path.join("model_weights", "cp-{epoch:02d}")
 
-# ''' Fine tuning step - VGG19 and ResNet50'''
+  ''' Fine tuning step - VGG19 '''
 
 try:
     _create_unverified_https_context = ssl._create_unverified_context
@@ -47,25 +47,17 @@ else:
     ssl._create_default_https_context = _create_unverified_https_context
 
 from keras.applications.vgg16 import VGG16
-from keras.applications.resnet import ResNet50
 
-#model = VGG16(include_top=False, input_shape=(1344, 224, 3), weights='imagenet')
-model = ResNet50(include_top=False, input_shape=(1344, 224, 3), weights='imagenet')
+model = VGG16(include_top=False, input_shape=(1344, 224, 3), weights='imagenet')
 
-#transfer_layer = model.get_layer('block5_pool')
-#vgg_model = Model(inputs=model.input, outputs=transfer_layer.output)
-transfer_layer = model.get_layer('conv5_block3_out')
-resnet_model = Model(inputs=model.input, outputs=transfer_layer.output)
+transfer_layer = model.get_layer('block5_pool')
+vgg_model = Model(inputs=model.input, outputs=transfer_layer.output)
 
-for layer in resnet_model.layers:
+for layer in vgg_model.layers[0:17]:
     layer.trainable = False
-
-#for layer in vgg_model.layers[0:17]:
-#    layer.trainable = False
-#my_model = Sequential()
-#my_model.add(vgg_model)
+    
 my_model = Sequential()
-my_model.add(resnet_model)
+my_model.add(vgg_model)
 my_model.add(Flatten())
 my_model.add(Dropout(0.5))
 my_model.add(Dense(1024, activation='relu'))
@@ -137,126 +129,39 @@ METRICS = [
     tf.keras.metrics.AUC(name='prc', curve='PR'),  # precision-recall curve
 ]
 
-# image_model = tf_cnns.LeNet.build(WIDTH, HEIGHT, depth=1, classes=N_CLASSES)
-def build_model(output_bias=None, reg=0.0002):
-    if output_bias is not None:
-        output_bias = tf.keras.initializers.Constant(output_bias)
-    model = Sequential()
-    inputShape = (HEIGHT, WIDTH, 1)
-    chanDim = -1
-
-    # if we are using "channels first", update the input shape
-    # and channels dimension
-    if K.image_data_format() == "channels_first":
-        inputShape = (depth, height, width)
-        chanDim = 1
-
-    # Block #1: first CONV => RELU => POOL layer set
-    model.add(Conv2D(96, (11, 11), strides=(4, 4),
-                     input_shape=inputShape, padding="same",
-                     kernel_regularizer=l2(reg)))
-    model.add(Activation("relu"))
-    model.add(BatchNormalization(axis=chanDim))
-    model.add(MaxPool2D(pool_size=(3, 3), strides=(2, 2)))
-    model.add(Dropout(0.25))
-
-    # Block #2: second CONV => RELU => POOL layer set
-    model.add(Conv2D(256, (5, 5), padding="same",
-                     kernel_regularizer=l2(reg)))
-    model.add(Activation("relu"))
-    model.add(BatchNormalization(axis=chanDim))
-    model.add(MaxPool2D(pool_size=(3, 3), strides=(2, 2)))
-    model.add(Dropout(0.25))
-
-    # Block #3: CONV => RELU => CONV => RELU => CONV => RELU
-    model.add(Conv2D(384, (3, 3), padding="same",
-                     kernel_regularizer=l2(reg)))
-    model.add(Activation("relu"))
-    model.add(BatchNormalization(axis=chanDim))
-    model.add(Conv2D(384, (3, 3), padding="same",
-                     kernel_regularizer=l2(reg)))
-    model.add(Activation("relu"))
-    model.add(BatchNormalization(axis=chanDim))
-    model.add(Conv2D(256, (3, 3), padding="same",
-                     kernel_regularizer=l2(reg)))
-    model.add(Activation("relu"))
-    model.add(BatchNormalization(axis=chanDim))
-    model.add(MaxPool2D(pool_size=(3, 3), strides=(2, 2)))
-    model.add(Dropout(0.25))
-
-    # Block #4: first set of FC => RELU layers
-    model.add(Flatten())
-    model.add(Dense(4096, kernel_regularizer=l2(reg)))
-    model.add(Activation("relu"))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.5))
-
-    # Block #5: second set of FC => RELU layers
-    model.add(Dense(4096, kernel_regularizer=l2(reg)))
-    model.add(Activation("relu"))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.5))
-
-    model.add(Dense(100))
-    model.add(Activation("relu"))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.5))
-
-    # sigmoid classifier
-    model.add(Dense(N_CLASSES, activation='sigmoid', bias_initializer=output_bias))
-
-    # Tune the learning rate for the optimizer
-    model.compile(optimizer=Opt,
-                  loss=Loss,
-                  metrics=METRICS)
-
-    return model
-
-weigth_path = "{}_my_model.best.hdf5".format("image_mortality_AlexNet")
-checkpoint = ModelCheckpoint(weigth_path, monitor='val_loss', save_best_only=True, mode='min', save_weights_only=False)
-def scheduler(epoch, lr):
-  if epoch < 10:
-    return lr
-  else:
-    return lr * tf.math.exp(-0.1)
+weigth_path = "{}_my_model.best.hdf5".format("image_mortality_VGG19")
+checkpoint = ModelCheckpoint(weigth_path, monitor='val_prc', save_best_only=True, mode='max', save_weights_only=False)
 early_stopping = tf.keras.callbacks.EarlyStopping(
-    monitor='val_loss',
+    monitor='val_prc',
     verbose=1,
     patience=20,
-    mode='min',
+    mode='max',
     restore_best_weights=True)
 callback = LearningRateScheduler(scheduler)
-
-initial_bias = np.log([0.08])
-model = build_model(output_bias=initial_bias)
-initial_weights = os.path.join(tempfile.mkdtemp(), 'initial_weights')
-model.save_weights(initial_weights)
-image_model = build_model()
-image_model.load_weights(initial_weights)
 
 logdir = "logs/fit/" + datetime.now().strftime("%Y%m%d-%H%M%S")
 tensorboard_callback = TensorBoard(log_dir=logdir, histogram_freq=1)
 
 # Training the model
 # print("[INFO] Training the model ...")
-image_model.compile(loss= Loss, optimizer=Opt, metrics=METRICS)
-history = image_model.fit_generator(aug.flow(X_train, y_train, batch_size=BATCH_SIZE), validation_data=v_aug.flow(X_valid, y_valid),
+my_model.compile(loss= Loss, optimizer=Opt, metrics=METRICS)
+history = my_model.fit_generator(aug.flow(X_train, y_train, batch_size=BATCH_SIZE), validation_data=v_aug.flow(X_valid, y_valid),
                           epochs=NUM_EPOCHS,
                           callbacks=[early_stopping, checkpoint, tensorboard_callback], class_weight=class_weight)
 
 # summarize history for loss
-plt.plot(history.history['accuracy'])
-plt.plot(history.history['val_accuracy'])
+plt.plot(history.history['prc'])
+plt.plot(history.history['val_prc'])
 plt.plot(history.history['loss'])
 plt.plot(history.history['val_loss'])
 plt.title('Mortality CNN training')
-plt.ylabel('accuracy_loss')
+plt.ylabel('prc_loss')
 plt.xlabel('epoch')
-plt.legend(['train accuracy', 'validation accuracy', 'train loss', 'validation loss'], loc='upper right')
+plt.legend(['train f1 curve', 'validation f1 curve', 'train loss', 'validation loss'], loc='upper right')
 plt.show()
 
 # Saving model data
-model_json = image_model.to_json()
+model_json = my_model.to_json()
 with open("image_mortality_AlexNet.json", "w") as json_file:
     json_file.write(model_json)
 
