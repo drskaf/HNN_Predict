@@ -1,12 +1,12 @@
 import keras
-import numpy as np 
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import argparse
 import os
 from sklearn.preprocessing import LabelBinarizer, LabelEncoder, MinMaxScaler
 import tensorflow as tf
-from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import LogisticRegression
 from sklearn.svm import SVC
 from keras.utils import to_categorical
 from keras.preprocessing.image import ImageDataGenerator
@@ -18,71 +18,30 @@ from sklearn.metrics import roc_auc_score, accuracy_score, f1_score, roc_curve, 
 import pickle
 from random import sample
 from sklearn.model_selection import train_test_split
-
-
-# Command line arguments
-ap = argparse.ArgumentParser()
-ap.add_argument("-d", "--directory", required=True, help="path to input directory")
-ap.add_argument("-t", "--target", required=True, help="name of the target field")
-args = vars(ap.parse_args())
+import utils
+from sklearn.preprocessing import StandardScaler
+import tempfile
 
 # Load info file
-patient_df = pd.read_csv('/Users/ebrahamalskaf/Documents/patient_info.csv')
+patient_df = pd.read_csv('/Users/ebrahamalskaf/Documents/final_surv.csv')
+patient_df['Gender'] = patient_df['patient_GenderCode_x'].astype('category')
+patient_df['Gender'] = patient_df['Gender'].cat.codes
 
-# Loading images and labels
-def load_test_data(directory, target, df, im_size):
-    # initialize our images array
-    images = []
-    labels = []
-    indices = []
-    # Loop over folders and files
-    for root, dirs, files in os.walk(directory, topdown=True):
-        # Collect perfusion .png images
-        if len(files) > 1:
-            folder = os.path.split(root)[1]
-            dir_path = os.path.join(directory, folder)
-            for file in files:
-                if '.DS_Store' in files:
-                    files.remove('.DS_Store')
-                # Loading images
-                file_name = os.path.basename(file)[0]
-                if file_name == 'b':
-                    img1 = mpimg.imread(os.path.join(dir_path, file))
-                    img1 = resize(img1, (im_size, im_size))
-                if file_name == 'm':
-                    img2 = mpimg.imread(os.path.join(dir_path, file))
-                    img2 = resize(img2, (im_size, im_size))
-                if file_name == 'a':
-                    img3 = mpimg.imread(os.path.join(dir_path, file))
-                    img3 = resize(img3, (im_size, im_size))
-
-                    out = cv2.vconcat([img1, img2, img3])
-                    gray = cv2.cvtColor(out, cv2.COLOR_BGR2GRAY)
-                    gray = resize(gray, (224, 224))
-                    out = gray[..., np.newaxis]
-
-                    # Defining labels
-                    patient_info = df[df["ID"].values == int(folder)]
-                    the_class = patient_info[target].astype(int)
-
-                    images.append(out)
-                    labels.append(the_class)
-                    indices.append(int(folder))
-
-    return (np.array(images), np.array(labels), indices)
-
-(testX, testy, indices) = load_test_data(args["directory"], args["target"], patient_df, 224)
-le = LabelEncoder().fit(testy)
-testY = to_categorical(le.transform(testy), 2)
-df = pd.DataFrame(indices, columns=['ID'])
-info_df = pd.merge(df, patient_df, on=['ID'])
+# Load images
+(df1) = utils.load_label_png('/Users/ebrahamalskaf/Documents/**PERFUSION_CLASSIFICATION**/peak_LV_test', patient_df, 224)
+(df2) = utils.load_lge_data('/Users/ebrahamalskaf/Documents/**LGE_CLASSIFICATION**/lge_test', patient_df, 224)
+df = df1.merge(df2, on='ID')
+print(len(df))
+X_test1 = np.array([x1 for x1 in df['Perf']])
+X_test2 = np.array([x2 for x2 in df['LGE']])
+testX = np.hstack((X_test1, X_test2))
 
 # Load trained image model
-json_file = open('models/image_model_LeNet.json','r')
+json_file = open('models/mortality/Image_CNN/image_mortality_VGG19.json','r')
 model1_json = json_file.read()
 json_file.close()
 model1 = model_from_json(model1_json)
-model1.load_weights("models/#image_mortality_predictor_LeNet.best.hdf5")
+model1.load_weights("models/mortality/Image_CNN/image_mortality_VGG19_my_model.best.hdf5")
 
 # Predict with model
 preds1 = model1.predict(testX)
@@ -91,7 +50,7 @@ for p in preds1:
     pred = np.argmax(p, axis=0)
     pred_test_cl1.append(pred)
 print(pred_test_cl1[:5])
-survival_yhat = list(info_df[args["target"]].values)
+survival_yhat = np.array(df.pop('Event_x'))
 print(survival_yhat[:5])
 
 prob_outputs1 = {
@@ -103,58 +62,16 @@ print(prob_output_df1.head())
 
 # Evaluate model
 print(classification_report(survival_yhat, pred_test_cl1))
-print('Image CNN LeNet ROCAUC score:',roc_auc_score(survival_yhat, pred_test_cl1))
-print('Image CNN LeNet Accuracy score:',accuracy_score(survival_yhat, pred_test_cl1))
-print('Image CNN LeNet score:',f1_score(survival_yhat, pred_test_cl1))
+print('Image CNN ROCAUC score:',roc_auc_score(survival_yhat, pred_test_cl1))
+print('Image CNN Accuracy score:',accuracy_score(survival_yhat, pred_test_cl1))
+print('Image CNN score:',f1_score(survival_yhat, pred_test_cl1))
 
 # Load trained mixed model
 # Define columns
-categorical_col_list = ['Chronic_kidney_disease_(disorder)','Essential_hypertension', 'Gender', 'Heart_failure_(disorder)', 'Smoking_history',
-'Dyslipidaemia', 'Myocardial_infarction_(disorder)', 'Diabetes_mellitus_(disorder)', 'Cerebrovascular_accident_(disorder)']
-numerical_col_list= ['Age_on_20.08.2021_x', 'LVEF_(%)']
-PREDICTOR_FIELD = args["target"]
-
-def load_images(directory, im_size):
-    # initialize our images array
-    images = []
-    indices = []
-    # Loop over folders and files
-    for root, dirs, files in os.walk(directory, topdown=True):
-        # Collect perfusion .png images
-        if len(files) > 1:
-            folder = os.path.split(root)[1]
-            dir_path = os.path.join(directory, folder)
-            for file in files:
-                if '.DS_Store' in files:
-                    files.remove('.DS_Store')
-                # Loading images
-                file_name = os.path.basename(file)[0]
-                if file_name == 'b':
-                    img1 = mpimg.imread(os.path.join(dir_path, file))
-                    img1 = resize(img1, (im_size, im_size))
-                if file_name == 'm':
-                    img2 = mpimg.imread(os.path.join(dir_path, file))
-                    img2 = resize(img2, (im_size, im_size))
-                if file_name == 'a':
-                    img3 = mpimg.imread(os.path.join(dir_path, file))
-                    img3 = resize(img3, (im_size, im_size))
-
-                    out = cv2.vconcat([img1, img2, img3])
-                    gray = cv2.cvtColor(out, cv2.COLOR_BGR2GRAY)
-                    out = gray[..., np.newaxis]
-
-                    indices.append(int(folder))
-                    images.append(out)
-
-    return (np.array(images), indices)
-
-(testImageX, indices) = load_images(args["directory"], im_size=224)
-testImageX = testImageX / 255.0
-df = pd.DataFrame(indices, columns=['ID'])
-info_df = pd.merge(df, patient_df, on=['ID'])
-testy = info_df[args["target"]]
-le = LabelEncoder().fit(testy)
-testY = to_categorical(le.transform(testy), 2)
+categorical_col_list = ['Chronic_kidney_disease_(disorder)_x','Essential_hypertension_x', 'Gender_x', 'Heart_failure_(disorder)_x', 'Smoking_history_x',
+'Dyslipidaemia_x', 'Myocardial_infarction_(disorder)_x', 'Diabetes_mellitus_(disorder)_x', 'Cerebrovascular_accident_(disorder)_x']
+numerical_col_list= ['Age_on_20.08.2021_x_x', 'LVEF_(%)_x']
+testImageX = testX / 255.0
 
 def process_attributes(df):
     continuous = numerical_col_list
@@ -172,10 +89,15 @@ def process_attributes(df):
 
     return (testX)
 
-testAttrX = process_attributes(info_df)
+testAttrX = process_attributes(df)
+testAttrX = np.array(testAttrX)
 
 # Load model
-model2 = keras.models.load_model('models/#mixed_mortality_predictor_LeNet.best.hdf5')
+json_file = open('models/mortality/HNN/mixed_mortality_VGG19.json','r')
+model2_json = json_file.read()
+json_file.close()
+model2 = model_from_json(model2_json)
+model2.load_weights('models/mortality/HNN/mixed_mortality_VGG19_my_model.best.hdf5')
 
 # Predict with model
 preds2 = model2.predict([testAttrX, testImageX])
@@ -194,56 +116,57 @@ print(prob_output_df2.head())
 
 # Evaluate model
 print(classification_report(survival_yhat, pred_test_cl2))
-print('Mixed NN ROCAUC score:',roc_auc_score(survival_yhat, pred_test_cl2))
-print('Mixed NN Accuracy score:',accuracy_score(survival_yhat, pred_test_cl2))
-print('Mixed NN F1 score:',f1_score(survival_yhat, pred_test_cl2))
+print('HNN ROCAUC score:',roc_auc_score(survival_yhat, pred_test_cl2))
+print('HNN Accuracy score:',accuracy_score(survival_yhat, pred_test_cl2))
+print('HNN F1 score:',f1_score(survival_yhat, pred_test_cl2))
 
 # Train ML model on clinical data
+# Define data file
+categorical_col_list = ['Chronic_kidney_disease_(disorder)','Essential_hypertension', 'Gender', 'Heart_failure_(disorder)', 'Smoking_history',
+'Dyslipidaemia', 'Myocardial_infarction_(disorder)', 'Diabetes_mellitus_(disorder)', 'Cerebrovascular_accident_(disorder)']
+numerical_col_list= ['Age_on_20.08.2021_x', 'LVEF_(%)']
+
+dirs1 = []
+dirs2 = []
+dir_1 = os.listdir('/Users/ebrahamalskaf/Documents/**PERFUSION_CLASSIFICATION**/peak_LV_images')
+dir_2 = os.listdir('/Users/ebrahamalskaf/Documents/**PERFUSION_CLASSIFICATION**/peak_LV_test')
+dirp = dir_2 + dir_1
+
+dir_3 = os.listdir('/Users/ebrahamalskaf/Documents/**LGE_CLASSIFICATION**/lge_img')
+dir_4 = os.listdir('/Users/ebrahamalskaf/Documents/**LGE_CLASSIFICATION**/lge_test')
+dirl = dir_3 + dir_4
+
+for d in dirp:
+    if '.DS_Store' in dirp:
+        dirp.remove('.DS_Store')
+    folder_strip = d.rstrip('_')
+    dirs1.append(int(folder_strip))
+
+for d in dirl:
+    if '.DS_Store' in dirl:
+        dirl.remove('.DS_Store')
+    folder_strip = d.rstrip('_')
+    dirs2.append(int(folder_strip))
+
+df1 = pd.DataFrame(dirs1, columns=['index'])
+df1['ID'] = df1['index'].astype(int)
+df2 = pd.DataFrame(dirs2, columns=['index'])
+df2['ID'] = df2['index'].astype(int)
+df = pd.merge(df1, df2, on=['ID'])
+
+# Create dataframe
+data = patient_df.merge(df, on=['ID'])
+print(len(data))
+
 # Loading clinical data
-def process_attributes(df, train, valid):
-    continuous = numerical_col_list
-    categorical = categorical_col_list
-    cs = MinMaxScaler()
-    trainContinuous = cs.fit_transform(train[continuous])
-    valContinuous = cs.transform(valid[continuous])
-
-    # One-hot encode categorical data
-    catBinarizer = LabelBinarizer().fit(df[categorical])
-    trainCategorical = catBinarizer.transform(train[categorical])
-    valCategorical = catBinarizer.transform(valid[categorical])
-
-    # Construct our training and testing data points by concatenating
-    # the categorical features with the continous features
-    trainX = np.hstack([trainCategorical, trainContinuous])
-    valX = np.hstack([valCategorical, valContinuous])
-
-    return (trainX, valX)
-
-def patient_dataset_splitter(df, patient_key='patient_TrustNumber'):
-    '''
-    df: pandas dataframe, input dataset that will be split
-    patient_key: string, column that is the patient id
-    return:
-     - train: pandas dataframe,
-     - validation: pandas dataframe,
-    '''
-
-    df.iloc[np.random.permutation(len(df))]
-    unique_values = df[patient_key].unique()
-    total_values = len(unique_values)
-    train_size = round(total_values * 0.8)
-    train = df[df[patient_key].isin(unique_values[:train_size])].reset_index(drop=True)
-    validation = df[df[patient_key].isin(unique_values[train_size:])].reset_index(drop=True)
-
-    return train, validation
-
-trainx, testx = patient_dataset_splitter(patient_df, patient_key='patient_TrustNumber')
-y_train = trainx[args["target"]]
-y_test = testx[args["target"]]
-(x_train, x_test) = process_attributes(patient_df, trainx, testx)
+trainx, testx = utils.patient_dataset_splitter(data, patient_key='patient_TrustNumber')
+y_train = np.array(trainx.pop('Event'))
+y_test = np.array(testx.pop('Event'))
+x_train = np.array(trainx[categorical_col_list + numerical_col_list])
+x_test = np.array(testx[categorical_col_list + numerical_col_list])
 
 # fit Linear model
-lr_model = LinearRegression()
+lr_model = LogisticRegression()
 lr_model.fit(x_train, y_train)
 lr_predict = lr_model.predict(x_test)
 lr_preds = lr_model.predict_proba(x_test)[:,1]
@@ -253,15 +176,16 @@ print('Linear Accuracy score:',accuracy_score(y_test, lr_predict))
 print('Linear F1 score:',f1_score(y_test, lr_predict))
 
 # Plot ROC
-fpr, tpr, _ = roc_curve(survival_yhat, preds2[:,1])
-auc = round(roc_auc_score(survival_yhat, preds2[:,1]), 2)
+fpr, tpr, _ = roc_curve(survival_yhat, preds2[:,0])
+auc = round(roc_auc_score(survival_yhat, preds2[:,0]), 2)
 plt.plot(fpr, tpr, label="Mixed NN , AUC="+str(auc))
-fpr, tpr, _ = roc_curve(survival_yhat, preds1[:,1])
-auc = round(roc_auc_score(survival_yhat, preds1[:,1]), 2)
+fpr, tpr, _ = roc_curve(survival_yhat, preds1[:,0])
+auc = round(roc_auc_score(survival_yhat, preds1[:,0]), 2)
 plt.plot(fpr, tpr, label="Image CNN , AUC="+str(auc))
 fpr, tpr, _ = roc_curve(y_test, lr_preds)
 auc = round(roc_auc_score(y_test, lr_preds), 2)
 plt.plot(fpr,tpr,label="Clinical ML Model, AUC="+str(auc))
+plt.plot([0, 1], [0, 1], color='navy', lw=1, linestyle='--')
 plt.legend()
 plt.xlabel('1 - Specificity')
 plt.ylabel('Sensitivity')
@@ -269,11 +193,11 @@ plt.title('AUC Models Comparison')
 plt.show()
 
 # Plot PR
-precision, recall, thresholds = precision_recall_curve(survival_yhat, preds2[:,1])
-label='%s (F1 Score:%0.2f)' % ('Mixed NN', average_precision_score(survival_yhat, preds2[:,1]))
+precision, recall, thresholds = precision_recall_curve(survival_yhat, preds2[:,0])
+label='%s (F1 Score:%0.2f)' % ('Mixed NN', average_precision_score(survival_yhat, preds2[:,0]))
 plt.plot(recall, precision, label=label)
-precision, recall, thresholds = precision_recall_curve(survival_yhat, preds1[:,1])
-label='%s (F1 Score:%0.2f)' % ('Image CNN', average_precision_score(survival_yhat, preds1[:,1]))
+precision, recall, thresholds = precision_recall_curve(survival_yhat, preds1[:,0])
+label='%s (F1 Score:%0.2f)' % ('Image CNN', average_precision_score(survival_yhat, preds1[:,0]))
 plt.plot(recall, precision, label=label)
 precision, recall, thresholds = precision_recall_curve(y_test, lr_preds)
 label='%s (F1 Score:%0.2f)' % ('Clinical ML Model', average_precision_score(y_test, lr_preds))
