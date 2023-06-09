@@ -162,7 +162,7 @@ plt.show()
 
 # Saving model data
 model_json = my_model.to_json()
-with open("image_mortality_AlexNet.json", "w") as json_file:
+with open("image_mortality_VGG19.json", "w") as json_file:
     json_file.write(model_json)
 
 K.clear_session()
