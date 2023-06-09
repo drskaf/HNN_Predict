@@ -88,12 +88,12 @@ class_weight = {0: 0.595,
 
 # Splitting data
 (df_train, df_valid) = train_test_split(df, train_size=0.7, stratify=df[args["target"]])
-X_train1 = np.array([x1 / 255.0 for x1 in df_train['Perf']])
-X_train2 = np.array([x2 / 255.0 for x2 in df_train['LGE']])
+X_train1 = np.array([x1 for x1 in df_train['Perf']])
+X_train2 = np.array([x2 for x2 in df_train['LGE']])
 X_train = np.hstack((X_train1, X_train2))
 print(X_train.shape)
-X_valid1 = np.array([x1 / 255.0 for x1 in df_valid['Perf']])
-X_valid2 = np.array([x2 / 255.0 for x2 in df_valid['LGE']])
+X_valid1 = np.array([x1 for x1 in df_valid['Perf']])
+X_valid2 = np.array([x2 for x2 in df_valid['LGE']])
 X_valid = np.hstack((X_valid1, X_valid2))
 
 y_train = np.array(df_train.pop(args["target"]))
