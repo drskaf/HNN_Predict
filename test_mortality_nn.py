@@ -61,7 +61,7 @@ print(prob_output_df1.head())
 print(classification_report(survival_yhat, pred_test_cl1))
 print('Image CNN ROCAUC score:',roc_auc_score(survival_yhat, pred_test_cl1))
 print('Image CNN Accuracy score:',accuracy_score(survival_yhat, pred_test_cl1))
-print('Image CNN score:',f1_score(survival_yhat, pred_test_cl1))
+print('Image CNN F1 score:',f1_score(survival_yhat, pred_test_cl1))
 
 # Load trained mixed model
 # Define columns
