@@ -98,7 +98,7 @@ model2.load_weights('models/mortality/HNN/mixed_mortality_VGG19_my_model.best.hd
 
 # Predict with model
 preds2 = model2.predict([testAttrX, testImageX])
-pred_test_cl2 = pred_test_cl1 = list(map(lambda x: 0 if x[0]<0.5 else 1, preds1))
+pred_test_cl2 = pred_test_cl1 = list(map(lambda x: 0 if x[0]<0.5 else 1, preds2))
 print(pred_test_cl2[:5])
 
 prob_outputs2 = {
