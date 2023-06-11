@@ -45,10 +45,7 @@ model1.load_weights("models/mortality/Image_CNN/image_mortality_VGG19_my_model.b
 
 # Predict with model
 preds1 = model1.predict(testX)
-pred_test_cl1 = []
-for p in preds1:
-    pred = np.argmax(p, axis=0)
-    pred_test_cl1.append(pred)
+pred_test_cl1 = pred_test_cl1 = list(map(lambda x: 0 if x[0]<0.5 else 1, preds1))
 print(pred_test_cl1[:5])
 survival_yhat = np.array(df.pop('Event_x'))
 print(survival_yhat[:5])
@@ -101,10 +98,7 @@ model2.load_weights('models/mortality/HNN/mixed_mortality_VGG19_my_model.best.hd
 
 # Predict with model
 preds2 = model2.predict([testAttrX, testImageX])
-pred_test_cl2 = []
-for p in preds2:
-    pred = np.argmax(p, axis=0)
-    pred_test_cl2.append(pred)
+pred_test_cl2 = pred_test_cl1 = list(map(lambda x: 0 if x[0]<0.5 else 1, preds1))
 print(pred_test_cl2[:5])
 
 prob_outputs2 = {
