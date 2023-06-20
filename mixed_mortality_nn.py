@@ -8,7 +8,6 @@ import argparse
 import utils
 import matplotlib.image as mpimg
 from skimage.transform import resize
-import tf_cnns
 from keras.models import Sequential
 from keras. layers import Input, Dense, Flatten, concatenate, Conv2D, Activation, MaxPool2D, Dropout, BatchNormalization
 from keras.models import Model
