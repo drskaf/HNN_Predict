@@ -1,5 +1,4 @@
 import matplotlib.pyplot as plt
-from sklearn.preprocessing import LabelBinarizer, MinMaxScaler, LabelEncoder
 import pandas as pd
 import numpy as np
 import glob
@@ -7,7 +6,6 @@ import cv2
 import os
 import argparse
 import utils
-import locale
 import matplotlib.image as mpimg
 from skimage.transform import resize
 import tf_cnns
@@ -19,14 +17,8 @@ import tensorflow as tf
 from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping, TensorBoard, LearningRateScheduler
 from sklearn.model_selection import train_test_split
 from keras import backend as K
-from keras.utils import to_categorical, plot_model
 from datetime import datetime
-import visualkeras
-from ann_visualizer.visualize import ann_viz
-import graphviz
-import pydot
 from sklearn.preprocessing import StandardScaler
-import tempfile
 from tensorflow.keras.regularizers import l2
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from random import sample
@@ -67,182 +59,14 @@ def create_mlp(dim, regress=False):
     # return our model
     return model
 
-class LeNet:
-    @staticmethod
-    def build_cnn(height, width, depth, regress=False):
-        # initialize the model
-        model = Sequential()
-        inputShape = (height, width, depth)
-
-        # if we are using "channels first", update the input shape
-        if K.image_data_format() == "channels_first":
-            inputShape = (depth, height, width)
-
-        # first set of CONV => RELU => POOL layers
-        model.add(Conv2D(20, (5, 5), padding="same",
-                         input_shape=inputShape))
-        model.add(Activation("relu"))
-        model.add(MaxPool2D(pool_size=(2, 2), strides=(2, 2)))
-
-        # second set of CONV => RELU => POOL layers
-        model.add(Conv2D(50, (5, 5), padding="same"))
-        model.add(Activation("relu"))
-        model.add(MaxPool2D(pool_size=(2, 2), strides=(2, 2)))
-
-        # first (and only) set of FC => RELU layers
-        model.add(Flatten())
-        model.add(Dense(16))
-        model.add(Activation("relu"))
-
-        # softmax classifier
-        model.add(Dense(4))
-        model.add(Activation("relu"))
-
-        # check to see if the regression node should be added
-        if regress:
-            model.add(Dense(1, activation="linear"))
-
-        # return the constructed network architecture
-        return model
-
-class MiniVGGNet:
-    @staticmethod
-    def build(height, width, depth):
-        # initialize the model along with the input shape to be
-		# "channels last" and the channels dimension itself
-        model = Sequential()
-        inputShape = (height, width, depth)
-        chanDim = -1
-
-        # if we are using "channels first", update the input shape
-		# and channels dimension
-        if K.image_data_format() == "channels_first":
-            inputShape = (depth, height, width)
-            chanDim = 0
-
-        # first CONV => RELU => CONV => RELU => POOL layer set
-        model.add(Conv2D(32, (3, 3), padding="same",
-			input_shape=inputShape))
-        model.add(Activation("relu"))
-        model.add(BatchNormalization(axis=chanDim))
-        model.add(Conv2D(32, (3, 3), padding="same"))
-        model.add(Activation("relu"))
-        model.add(BatchNormalization(axis=chanDim))
-        model.add(MaxPool2D(pool_size=(2, 2)))
-        model.add(Dropout(0.25))
-
-        # second CONV => RELU => CONV => RELU => POOL layer set
-        model.add(Conv2D(64, (3, 3), padding="same"))
-        model.add(Activation("relu"))
-        model.add(BatchNormalization(axis=chanDim))
-        model.add(Conv2D(64, (3, 3), padding="same"))
-        model.add(Activation("relu"))
-        model.add(BatchNormalization(axis=chanDim))
-        model.add(MaxPool2D(pool_size=(2, 2)))
-        model.add(Dropout(0.25))
-
-        # first (and only) set of FC => RELU layers
-        model.add(Flatten())
-        model.add(Dense(100))
-        model.add(Activation("relu"))
-        model.add(BatchNormalization())
-        model.add(Dropout(0.5))
-
-        model.add(Dense(16))
-        model.add(Activation("relu"))
-        model.add(Dense(4))
-        model.add(Activation("relu"))
-
-        return model
-
-class AlexNet:
-    @staticmethod
-    def build(height, width, depth, reg=0.0002):
-        # initialize the model along with the input shape to be
-		# "channels last" and the channels dimension itself
-        model = Sequential()
-        inputShape = (height, width, depth)
-        chanDim = -1
-
-        # if we are using "channels first", update the input shape
-		# and channels dimension
-        if K.image_data_format() == "channels_first":
-            inputShape = (depth, height, width)
-            chanDim = 1
-
-        # Block #1: first CONV => RELU => POOL layer set
-        model.add(Conv2D(96, (11, 11), strides=(4, 4),
-			input_shape=inputShape, padding="same",
-			kernel_regularizer=l2(reg)))
-        model.add(Activation("relu"))
-        model.add(BatchNormalization(axis=chanDim))
-        model.add(MaxPool2D(pool_size=(3, 3), strides=(2, 2)))
-        model.add(Dropout(0.25))
-
-        # Block #2: second CONV => RELU => POOL layer set
-        model.add(Conv2D(256, (5, 5), padding="same",
-			kernel_regularizer=l2(reg)))
-        model.add(Activation("relu"))
-        model.add(BatchNormalization(axis=chanDim))
-        model.add(MaxPool2D(pool_size=(3, 3), strides=(2, 2)))
-        model.add(Dropout(0.25))
-
-        # Block #3: CONV => RELU => CONV => RELU => CONV => RELU
-        model.add(Conv2D(384, (3, 3), padding="same",
-			kernel_regularizer=l2(reg)))
-        model.add(Activation("relu"))
-        model.add(BatchNormalization(axis=chanDim))
-        model.add(Conv2D(384, (3, 3), padding="same",
-			kernel_regularizer=l2(reg)))
-        model.add(Activation("relu"))
-        model.add(BatchNormalization(axis=chanDim))
-        model.add(Conv2D(256, (3, 3), padding="same",
-			kernel_regularizer=l2(reg)))
-        model.add(Activation("relu"))
-        model.add(BatchNormalization(axis=chanDim))
-        model.add(MaxPool2D(pool_size=(3, 3), strides=(2, 2)))
-        model.add(Dropout(0.25))
-
-        # Block #4: first set of FC => RELU layers
-        model.add(Flatten())
-        model.add(Dense(4096, kernel_regularizer=l2(reg)))
-        model.add(Activation("relu"))
-        model.add(BatchNormalization())
-        model.add(Dropout(0.5))
-
-        # Block #5: second set of FC => RELU layers
-        model.add(Dense(4096, kernel_regularizer=l2(reg)))
-        model.add(Activation("relu"))
-        model.add(BatchNormalization())
-        model.add(Dropout(0.5))
-
-        model.add(Flatten())
-        model.add(Dense(100))
-        model.add(Activation("relu"))
-        model.add(BatchNormalization())
-        model.add(Dropout(0.5))
-
-        model.add(Dense(16))
-        model.add(Activation("relu"))
-        model.add(Dense(4))
-        model.add(Activation("relu"))
-
-        return model
-
 from keras.applications.vgg16 import VGG16
-from keras.applications.resnet import ResNet50
 vgg_model = VGG16(include_top=False, input_shape=(1344, 224, 3), weights='imagenet')
-#resnet_model = ResNet50(include_top=False, input_shape=(1344, 224, 3), weights='imagenet')
 
 transfer_layer = vgg_model.get_layer('block5_pool')
-#transfer_layer = resnet_model.get_layer('conv5_block3_out')
 vgg_model = Model(inputs = vgg_model.input, outputs = transfer_layer.output)
-#resnet_model = Model(inputs = resnet_model.input, outputs = transfer_layer.output)
 
 for layer in vgg_model.layers[0:17]:
     layer.trainable = False
-#for layer in resnet_model.layers:
- #   layer.trainable = False
 my_model = Sequential()
 my_model.add(vgg_model)
 my_model.add(Flatten())
@@ -261,10 +85,6 @@ print(len(df1))
 print(len(df2))
 df = df1.merge(df2, on='ID')
 print(len(df))
-df['Ventricular_tachycardia'] = df['Ventricular_tachycardia_(disorder)_x'].astype('int')
-df['Ventricular_fibrillation'] = df['Ventricular_fibrillation_(disorder)_x'].astype('int')
-df['VT'] = df[['Ventricular_tachycardia','Ventricular_fibrillation']].apply(lambda x:'{}'.format(np.max(x)), axis=1)
-df['VT'] = df['VT'].astype(int)
 
 def process_attributes(df, train, valid):
     continuous = numerical_col_list
@@ -314,30 +134,15 @@ valid_gen = v_aug = ImageDataGenerator(samplewise_center=True, samplewise_std_no
 validImages = valid_gen.flow(validImages, batch_size=1000)
 validImagesX = validImages.next()
 
-#trainAttrX = df_train[categorical_col_list + numerical_col_list]
-#trainAttrX = np.array(trainAttrX)
-#validAttrX = df_valid[categorical_col_list + numerical_col_list]
-#validAttrX = np.array(validAttrX)
-#scaler = StandardScaler()
-#trainAttrX = scaler.fit_transform(trainAttrX)
-#validAttrX = scaler.transform(validAttrX)
-#trainAttrX = np.clip(trainAttrX, -5, 5)
-#validAttrX = np.clip(validAttrX, -5, 5)
 (trainAttrX, validAttrX) = process_attributes(df, df_train, df_valid)
 
 # find the targest field in the training set
 trainy = np.array(df_train.pop(args["target"]))
 tlist = trainy.tolist()
 print(tlist.count(1))
-#le = LabelEncoder().fit(trainy)
-#trainY = to_categorical(le.transform(trainy), 2)
 validy = np.array(df_valid.pop(args["target"]))
 vlist = validy.tolist()
 print(vlist.count(1))
-#le = LabelEncoder().fit(validy)
-#validY = to_categorical(le.transform(validy), 2)
-class_weight = {0: 0.595,
-                1: 3.3130}
 
 # create the MLP and CNN models
 mlp = create_mlp(trainAttrX.shape[1], regress=False)
@@ -353,7 +158,6 @@ x = Dense(N_CLASSES, activation="sigmoid")(x)
 # input and images on the CNN input, outputting a single value (outcome
 # prediction)
 model = Model(inputs=[mlp.input, cnn.input], outputs=x)
-#ann_viz(model, view=True, filename='model_tree', title='HNN')
 
 # compile the model using binary categorical cross-entropy given that
 # we have binary classes of either the prediction is positive or negative
@@ -373,11 +177,6 @@ model.compile(loss="binary_crossentropy", optimizer=opt, metrics=METRICS)
 #print(model.predict([trainAttrX, trainImagesX][:10]))
 weigth_path = "{}_my_model.best.hdf5".format("mixed_VA_VGG19")
 checkpoint = ModelCheckpoint(weigth_path, monitor='val_prc', save_best_only=True, mode='max', save_weights_only=False)
-def scheduler(epoch, lr):
-  if epoch < 10:
-    return lr
-  else:
-    return lr * tf.math.exp(-0.1)
 early_stopping = EarlyStopping(
     monitor='val_prc',
     verbose=1,
