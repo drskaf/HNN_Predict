@@ -108,13 +108,20 @@ def process_attributes(df, train, valid):
 # the data for training and the remaining 20% for testing
 print("[INFO] processing data...")
 (df_train, df_valid) = train_test_split(df, train_size=0.8, stratify=df[args["target"]])
+# find the targest field in the training set
+trainy = np.array(df_train.pop(args["target"]))
+tlist = trainy.tolist()
+print(tlist.count(1))
+validy = np.array(df_valid.pop(args["target"]))
+vlist = validy.tolist()
+print(vlist.count(1))
 p_ind_train = df_train[df_train[args["target"]]==1].index.tolist()
 np_ind_train = df_train[df_train[args["target"]]==0].index.tolist()
 np_sample_train = sample(np_ind_train, len(p_ind_train))
 df_train = df_train.loc[p_ind_train + np_sample_train]
 p_ind_valid = df_valid[df_valid[args["target"]]==1].index.tolist()
 np_ind_valid = df_valid[df_valid[args["target"]]==0].index.tolist()
-np_sample_valid = sample(np_ind_valid, 11*len(p_ind_valid))
+np_sample_valid = sample(np_ind_valid, (len(df) - (tlist.count(1) + vlist.count(1)) // (tlist.count(1) + vlist.count(1)))*len(p_ind_valid))
 df_valid = df_valid.loc[p_ind_valid + np_sample_valid]
 X_train1 = np.array([x1 for x1 in df_train['Perf']])
 X_train2 = np.array([x2 for x2 in df_train['LGE']])
@@ -134,14 +141,6 @@ validImages = valid_gen.flow(validImages, batch_size=1000)
 validImagesX = validImages.next()
 
 (trainAttrX, validAttrX) = process_attributes(df, df_train, df_valid)
-
-# find the targest field in the training set
-trainy = np.array(df_train.pop(args["target"]))
-tlist = trainy.tolist()
-print(tlist.count(1))
-validy = np.array(df_valid.pop(args["target"]))
-vlist = validy.tolist()
-print(vlist.count(1))
 
 # create the MLP and CNN models
 mlp = create_mlp(trainAttrX.shape[1], regress=False)
