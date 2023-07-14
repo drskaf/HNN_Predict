@@ -26,70 +26,71 @@ from PIL import Image
 import re
 
 
-def load_label_png(directory, df, im_size):
+def load_all_data(directory1, directory2, df, im_size):
     """
-    Read through .png images in sub-folders, read through label .csv file and
-    annotate
     Args:
-     directory: path to the data directory
-     df_info: .csv file containing the label information
-     im_size: target image size
+     directory: the path to the folder where images are stored
     Return:
-        resized images with their labels
+        list of images and indices
     """
-    # Initiate lists of images and labels
+
     images = []
-    #labels = []
     indices = []
 
+    dirs1 = os.listdir(directory1)
+    dirs2 = os.listdir(directory2)
+    dirsCom = set(dirs1).intersection(dirs2)
     # Loop over folders and files
-    for root, dirs, files in os.walk(directory, topdown=True):
-
-        # Collect perfusion .png images
-        if len(files) > 1:
-            folder = os.path.split(root)[1]
-            folder_strip = folder.rstrip('_')
-            for file in files:
+    for root, dirs, files in os.walk(directory1, topdown=True):
+        if '.DS_Store' in files:
+            files.remove('.DS_Store')
+        for dirp in dirs:
+            if dirp in dirsCom:
+                folder_strip = dirp.rstrip('_')
+                imgList = []
+                dir_path = os.path.join(directory1, dirp)
+                files = sorted(os.listdir(dir_path))
                 if '.DS_Store' in files:
                     files.remove('.DS_Store')
-                dir_path = os.path.join(directory, folder)
-                # Loading images
-                file_name = os.path.basename(file)[0]
-                if file_name == 'b':
-                    img1 = mpimg.imread(os.path.join(dir_path, file))
-                    img1 = resize(img1, (im_size, im_size))
-                elif file_name == 'm':
-                    img2 = mpimg.imread(os.path.join(dir_path, file))
-                    img2 = resize(img2, (im_size, im_size))
-                elif file_name == 'a':
-                    img3 = mpimg.imread(os.path.join(dir_path, file))
-                    img3 = resize(img3, (im_size, im_size))
+                for file in files:
+                    img = mpimg.imread(os.path.join(dir_path, file))
+                    img = resize(img, (im_size, im_size))
+                    imgList.append(img)
+                for root, dirs, files in os.walk(directory2, topdown=True):
+                    if '.DS_Store' in files:
+                        files.remove('.DS_Store')
+                    for dirl in dirs:
+                        if dirl == dirp:
+                            dir_path = os.path.join(directory2, dirl)
+                            files = sorted(os.listdir(dir_path))
+                            if '.DS_Store' in files:
+                                files.remove('.DS_Store')
+                            for file in files:
+                                img = mpimg.imread(os.path.join(dir_path, file))
+                                img = resize(img, (im_size, im_size))
+                                imgList.append(img)
+                        else:
+                            continue
 
-                    out = cv2.vconcat([img1, img2, img3])
-                    gray = cv2.cvtColor(out, cv2.COLOR_BGR2GRAY)
-                    gray = resize(gray, (672, 224))
-                    out = cv2.merge([gray, gray, gray])
-                    #out = gray[..., np.newaxis]
-                    #out = np.array(out)
+                images.append(imgList)
+                indices.append(int(folder_strip))
 
-                    # Defining labels
-                    #patient_info = df[df["ID"].values == int(folder_strip)]
-                    #the_class = patient_info[target]
-                    #if df[df["ID"].values == int(folder_strip)][target].values == 1:
-                     #   the_class = 1
-                    #else:
-                     #   the_class = 2
-
-                    images.append(out)
-                    #labels.append(the_class)
-                    indices.append(int(folder_strip))
+            else:
+                continue
+    Images = []
+    for image_list in images:
+        img = cv2.vconcat(image_list)
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        gray = resize(gray, (3584, 224))
+        out = cv2.merge([gray, gray, gray])
+        # out = gray[..., np.newaxis]
+        Images.append(out)
 
     idx_df = pd.DataFrame(indices, columns=['ID'])
-    idx_df['Perf'] = images
+    idx_df['images'] = Images
     info_df = pd.merge(df, idx_df, on=['ID'])
 
     return (info_df)
-
 
 def patient_dataset_splitter(df, patient_key='patient_TrustNumber'):
     '''
@@ -262,52 +263,6 @@ def centre_crop(img, new_width=None, new_height=None):
     return centre_cropped_img
 
 
-def load_multiclass_apical_png(directory, df, im_size):
-    """
-    Read through .png images in sub-folders, read through label .csv file and
-    annotate
-    Args:
-     directory: path to the data directory
-     df_info: .csv file containing the label information
-     im_size: target image size
-    Return:
-        resized images with their labels
-    """
-    # Initiate lists of images and labels
-    images = []
-    indices = []
-
-    # Loop over folders and files
-    for root, dirs, files in os.walk(directory, topdown=True):
-
-        # Collect perfusion .png images
-        if len(files) > 1:
-            folder = os.path.split(root)[1]
-            folder_strip = folder.rstrip('_')
-            dir_path = os.path.join(directory, folder)
-
-            for file in files:
-                if '.DS_Store' in files:
-                    files.remove('.DS_Store')
-
-                # Loading images
-                file_name = os.path.basename(file)[0]
-                if file_name == 'a':
-                    img = mpimg.imread(os.path.join(dir_path, file))
-                    img = resize(img, (im_size, im_size))
-                    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-                    #out = cv2.merge([gray, gray, gray])
-                    out = gray[..., np.newaxis]
-                    images.append(out)
-
-                    indices.append(int(folder_strip))
-
-    idx_df = pd.DataFrame(indices, columns=['ID'])
-    info_df = pd.merge(df, idx_df, on=['ID'])
-    info_df['images'] = images
-
-    return (info_df)
-
 def process_attributes(df, train, valid):
     continuous = numerical_col_list
     categorical = categorical_col_list
@@ -327,74 +282,3 @@ def process_attributes(df, train, valid):
 
     return (trainX, valX)
 
-
-# Load lge dicoms
-def load_lge_data(directory, df, im_size):
-    """
-    Args:
-     directory: the path to the folder where dicom images are stored
-    Return:
-        list of images and indices
-    """
-
-    images = []
-    indices = []
-
-    # Loop over folders and files
-    for root, dirs, files in os.walk(directory, topdown=True):
-        if '.DS_Store' in files:
-            files.remove('.DS_Store')
-        for dir in dirs:
-            imgList = []
-            folder_strip = dir.rstrip('_')
-            dir_path = os.path.join(directory, dir)
-            files = os.listdir(dir_path)
-            l = len(files)
-            for file in files:
-                file_name = os.path.basename(file)
-                file_name = file_name[:file_name.find('.')]
-
-                if file_name in ('0_1', '1_1', '2_1', '3_1'):
-                    img = mpimg.imread(os.path.join(dir_path, file))
-                    img = resize(img, (im_size, im_size))
-                    imgList.append(img)
-
-                elif file_name == f'{l-1}':
-                    img = mpimg.imread(os.path.join(dir_path, file))
-                    img = resize(img, (im_size, im_size))
-                    imgList.append(img)
-                elif file_name == f'{l-3}':
-                    img = mpimg.imread(os.path.join(dir_path, file))
-                    img = resize(img, (im_size, im_size))
-                    imgList.append(img)
-                elif file_name == f'{l-6}':
-                    img = mpimg.imread(os.path.join(dir_path, file))
-                    img = resize(img, (im_size, im_size))
-                    imgList.append(img)
-                elif file_name == f'{l-9}':
-                    img = mpimg.imread(os.path.join(dir_path, file))
-                    img = resize(img, (im_size, im_size))
-                    imgList.append(img)
-
-                else:
-                    continue
-
-            images.append(imgList)
-            indices.append(int(folder_strip))
-
-    Images = []
-    for image_list in images:
-        img = cv2.vconcat(image_list)
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        gray = resize(gray, (672, 224))
-        out = cv2.merge([gray, gray, gray])
-        #out = gray[..., np.newaxis]
-        Images.append(out)
-        #plt.imshow(img)
-        #plt.show()
-
-    idx_df = pd.DataFrame(indices, columns=['ID'])
-    idx_df['LGE'] = Images
-    info_df = pd.merge(df, idx_df, on=['ID'])
-
-    return (info_df)
