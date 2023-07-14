@@ -78,7 +78,7 @@ my_model.add(Dense(4))
 my_model.add(Activation("relu"))
 
 # Loading data
-(df1) = utils.load_label_png('/Users/ebrahamalskaf/Documents/**PERFUSION_CLASSIFICATION**/peak_LV_images', patient_df, INPUT_DIM)
+(df1) = utils.load_perf_data('/Users/ebrahamalskaf/Documents/**PERFUSION_CLASSIFICATION**/peak_LV_images', patient_df, INPUT_DIM)
 print(len(df1))
 (df2) = utils.load_lge_data('/Users/ebrahamalskaf/Documents/**LGE_CLASSIFICATION**/lge_img', patient_df, INPUT_DIM)
 print(len(df2))
