@@ -26,6 +26,112 @@ from PIL import Image
 import re
 
 
+def load_perf_data(directory, df, im_size):
+    """
+    Read through .png images in sub-folders, read through label .csv file and
+    annotate
+    Args:
+     directory: path to the data directory
+     df_info: .csv file containing the label information
+     im_size: target image size
+    Return:
+        resized images with their labels
+    """
+    # Initiate lists of images and labels
+    images = []
+    #labels = []
+    indices = []
+
+    # Loop over folders and files
+    for root, dirs, files in os.walk(directory, topdown=True):
+
+        # Collect perfusion .png images
+        if len(files) > 1:
+            folder = os.path.split(root)[1]
+            folder_strip = folder.rstrip('_')
+            for file in files:
+                if '.DS_Store' in files:
+                    files.remove('.DS_Store')
+                dir_path = os.path.join(directory, folder)
+                # Loading images
+                file_name = os.path.basename(file)[0]
+                if file_name == 'b':
+                    img1 = mpimg.imread(os.path.join(dir_path, file))
+                    img1 = resize(img1, (im_size, im_size))
+                elif file_name == 'm':
+                    img2 = mpimg.imread(os.path.join(dir_path, file))
+                    img2 = resize(img2, (im_size, im_size))
+                elif file_name == 'a':
+                    img3 = mpimg.imread(os.path.join(dir_path, file))
+                    img3 = resize(img3, (im_size, im_size))
+
+                    out = cv2.vconcat([img1, img2, img3])
+                    gray = cv2.cvtColor(out, cv2.COLOR_BGR2GRAY)
+                    gray = resize(gray, (672, 224))
+                    out = cv2.merge([gray, gray, gray])
+                    #out = gray[..., np.newaxis]
+
+                    images.append(out)
+                    indices.append(int(folder_strip))
+
+    idx_df = pd.DataFrame(indices, columns=['ID'])
+    idx_df['Perf'] = images
+    info_df = pd.merge(df, idx_df, on=['ID'])
+
+    return (info_df)
+
+
+def load_lge_data(directory, df, im_size):
+    """
+    Args:
+     directory: the path to the folder where dicom images are stored
+    Return:
+        list of images and indices
+    """
+
+    images = []
+    indices = []
+
+    # Loop over folders and files
+    for root, dirs, files in os.walk(directory, topdown=True):
+        if '.DS_Store' in files:
+            files.remove('.DS_Store')
+        for dir in dirs:
+            imgList = []
+            folder_strip = dir.rstrip('_')
+            dir_path = os.path.join(directory, dir)
+            files = os.listdir(dir_path)
+            for file in files:
+                file_name = os.path.basename(file)
+                file_name = file_name[:file_name.find('.')]
+
+                if file_name in ('1_1', '2_1', '3_1'):
+                    img = mpimg.imread(os.path.join(dir_path, file))
+                    img = resize(img, (im_size, im_size))
+                    imgList.append(img)
+
+                else:
+                    continue
+
+            images.append(imgList)
+            indices.append(int(folder_strip))
+
+    Images = []
+    for image_list in images:
+        img = cv2.vconcat(image_list)
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        gray = resize(gray, (672, 224))
+        out = cv2.merge([gray, gray, gray])
+        #out = gray[..., np.newaxis]
+        Images.append(out)
+
+    idx_df = pd.DataFrame(indices, columns=['ID'])
+    idx_df['LGE'] = Images
+    info_df = pd.merge(df, idx_df, on=['ID'])
+
+    return (info_df)
+
+
 def load_all_data(directory1, directory2, df, im_size):
     """
     Args:
