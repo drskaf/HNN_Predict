@@ -121,7 +121,7 @@ np_sample_train = sample(np_ind_train, len(p_ind_train))
 df_train = df_train.loc[p_ind_train + np_sample_train]
 p_ind_valid = df_valid[df_valid[args["target"]]==1].index.tolist()
 np_ind_valid = df_valid[df_valid[args["target"]]==0].index.tolist()
-np_sample_valid = sample(np_ind_valid, (len(df) - (tlist.count(1) + vlist.count(1)) // (tlist.count(1) + vlist.count(1)))*len(p_ind_valid))
+np_sample_valid = sample(np_ind_valid, (len(df) - ((len(df_valid) - vlist.count(1)) // vlist.count(1))*len(p_ind_valid))
 df_valid = df_valid.loc[p_ind_valid + np_sample_valid]
 X_train1 = np.array([x1 for x1 in df_train['Perf']])
 X_train2 = np.array([x2 for x2 in df_train['LGE']])
