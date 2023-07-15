@@ -132,72 +132,6 @@ def load_lge_data(directory, df, im_size):
     return (info_df)
 
 
-def load_all_data(directory1, directory2, df, im_size):
-    """
-    Args:
-     directory: the path to the folder where images are stored
-    Return:
-        list of images and indices
-    """
-
-    images = []
-    indices = []
-
-    dirs1 = os.listdir(directory1)
-    dirs2 = os.listdir(directory2)
-    dirsCom = set(dirs1).intersection(dirs2)
-    # Loop over folders and files
-    for root, dirs, files in os.walk(directory1, topdown=True):
-        if '.DS_Store' in files:
-            files.remove('.DS_Store')
-        for dirp in dirs:
-            if dirp in dirsCom:
-                folder_strip = dirp.rstrip('_')
-                imgList = []
-                dir_path = os.path.join(directory1, dirp)
-                files = sorted(os.listdir(dir_path))
-                if '.DS_Store' in files:
-                    files.remove('.DS_Store')
-                for file in files:
-                    img = mpimg.imread(os.path.join(dir_path, file))
-                    img = resize(img, (im_size, im_size))
-                    imgList.append(img)
-                for root, dirs, files in os.walk(directory2, topdown=True):
-                    if '.DS_Store' in files:
-                        files.remove('.DS_Store')
-                    for dirl in dirs:
-                        if dirl == dirp:
-                            dir_path = os.path.join(directory2, dirl)
-                            files = sorted(os.listdir(dir_path))
-                            if '.DS_Store' in files:
-                                files.remove('.DS_Store')
-                            for file in files:
-                                img = mpimg.imread(os.path.join(dir_path, file))
-                                img = resize(img, (im_size, im_size))
-                                imgList.append(img)
-                        else:
-                            continue
-
-                images.append(imgList)
-                indices.append(int(folder_strip))
-
-            else:
-                continue
-    Images = []
-    for image_list in images:
-        img = cv2.vconcat(image_list)
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        gray = resize(gray, (3584, 224))
-        out = cv2.merge([gray, gray, gray])
-        # out = gray[..., np.newaxis]
-        Images.append(out)
-
-    idx_df = pd.DataFrame(indices, columns=['ID'])
-    idx_df['images'] = Images
-    info_df = pd.merge(df, idx_df, on=['ID'])
-
-    return (info_df)
-
 def patient_dataset_splitter(df, patient_key='patient_TrustNumber'):
     '''
     df: pandas dataframe, input dataset that will be split
@@ -255,50 +189,6 @@ def nifti2dicom_1file(nifti_dir, out_dir, dcm_path):
         multi_dicom.append(dicom)
 
     return multi_dicom
-
-
-def load_perfusion_data(directory):
-    """
-    Args:
-     directory: the path to the folder where dicom images are stored
-    Return:
-        combined 3D files with 1st dimension as frames depth
-    """
-
-    videoStackList = []
-    indicesStackList = []
-    videoSingleList = []
-    indicesSingleList = []
-    videorawList = []
-
-    dir_paths = sorted(glob.glob(os.path.join(directory, "*")))
-    for dir_path in dir_paths:
-        file_paths = sorted(glob.glob(os.path.join(dir_path, "*.dcm")))
-
-        if len(file_paths) > 10:
-            folder = os.path.split(dir_path)[1]
-            print("\nWorking on ", folder)
-            vlist = []
-            vrlist = []
-            for file_path in file_paths:
-                imgraw = pydicom.read_file(file_path)
-                vrlist.append(imgraw)
-                img = imgraw.pixel_array
-                vlist.append(img)
-            videorawList.append(vrlist)
-            videoSingleList.append(vlist)
-            indicesSingleList.append(folder)
-
-        else:
-            folder = os.path.split(dir_path)[1]
-            print("\nWorking on ", folder)
-            for i in file_paths[0:]:
-                # Read stacked dicom and add to list
-                videoraw = pydicom.read_file(os.path.join(dir_path, i), force=True)
-                videoStackList.append(videoraw)
-                indicesStackList.append(folder)
-
-    return videorawList, videoSingleList, indicesSingleList, videoStackList, indicesStackList
 
 
 def balance_data(df, target_size=12):
