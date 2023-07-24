@@ -123,12 +123,34 @@ print('HNN F1 score:',f1_score(survival_yhat, pred_test_cl2))
 
 # Train ML model on clinical data
 # Define data file
+dir_1 = os.listdir('/Users/ebrahamalskaf/Documents/**PERFUSION_CLASSIFICATION**/peak_LV_images')
+dir_2 = os.listdir('/Users/ebrahamalskaf/Documents/**LGE_CLASSIFICATION**/lge_img')
+dirOne = []
+dirTwo = []
+for d in dir_1:
+    if '.DS_Store' in dir_1:
+        dir_1.remove('.DS_Store')
+    d = d.rstrip('_')
+    dirOne.append(d)
 
-trainx, testx = utils.patient_dataset_splitter(patient_df, patient_key='patient_TrustNumber')
-y_train = np.array(trainx.pop('VT'))
-y_test = np.array(testx.pop('VT'))
-x_train = np.array(process_attributes(trainx))
-x_test = np.array(process_attributes(testx))
+for d in dir_2:
+    if '.DS_Store' in dir_2:
+        dir_2.remove('.DS_Store')
+    d = d.rstrip('_')
+    dirTwo.append(d)
+df1 = pd.DataFrame(dirOne, columns=['index'])
+df1['ID'] = df1['index'].astype(int)
+df2 = pd.DataFrame(dirTwo, columns=['index'])
+df2['ID'] = df2['index'].astype(int)
+df_t = pd.merge(df1, df2, on=['ID'])
+# Create dataframe
+data = patient_df.merge(df_t, on=['ID'])
+print(len(data))
+
+y_train = np.array(data['Event_x'])
+y_test = np.array(df['Event_x_x'])
+x_train = np.array(process_attributes(data))
+x_test = np.array(process_attribute(df))
 
 # fit Linear model
 lr_model = LogisticRegression()
@@ -178,7 +200,6 @@ plt.show()
 
 # Test difference between models with McNemar's test
 # HNN vs Image CNN
-lr_preds = np.array(list(map(lambda x: 0 if x<0.5 else 1, lr_preds)))
 print("Evaluate HNN vs Image CNN...")
 tb = mcnemar_table(y_target=y_test,
                    y_model1=pred_test_cl1,
@@ -190,7 +211,7 @@ print('p-value:', p)
 # HNN vs LG
 print("Evaluate HNN vs Logistic Regression...")
 tb = mcnemar_table(y_target=y_test,
-                   y_model1=lr_preds,
+                   y_model1=lr_predict,
                    y_model2=pred_test_cl2)
 chi2, p = mcnemar(ary=tb, corrected=True)
 print('chi-squared:', chi2)
@@ -200,7 +221,7 @@ print('p-value:', p)
 print("Evaluate Image CNN vs Logistic Regression")
 tb = mcnemar_table(y_target=y_test,
                    y_model1=pred_test_cl1,
-                   y_model2=lr_preds)
+                   y_model2=lr_predict)
 chi2, p = mcnemar(ary=tb, corrected=True)
 print('chi-squared:', chi2)
 print('p-value:', p)
