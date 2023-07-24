@@ -45,7 +45,7 @@ model1.load_weights("models/VA/image_VA_VGG19_my_model.best.hdf5")
 
 # Predict with model
 preds1 = model1.predict(testX)
-pred_test_cl1 = list(map(lambda x: 0 if x[0]<0.5 else 1, preds1))
+pred_test_cl1 = np.array(list(map(lambda x: 0 if x[0]<0.5 else 1, preds1)))
 print(pred_test_cl1[:5])
 survival_yhat = np.array(df.pop('VT'))
 print(survival_yhat[:5])
@@ -91,7 +91,7 @@ df = df1.merge(df2, on='ID')
 print(len(df))
 X_test1 = np.array([x1 for x1 in df['Perf']])
 X_test2 = np.array([x2 for x2 in df['LGE']])
-testImageX = testX / 255.0 #np.hstack((X_test1, X_test2)) / 255.0
+testImageX = testX
 
 testAttrX = process_attributes(df)
 testAttrX = np.array(testAttrX)
@@ -105,7 +105,7 @@ model2.load_weights('models/VA/mixed_VA_VGG19_my_model.best.hdf5')
 
 # Predict with model
 preds2 = model2.predict([testAttrX, testImageX])
-pred_test_cl2 = list(map(lambda x: 0 if x[0]<0.5 else 1, preds2))
+pred_test_cl2 = np.array(list(map(lambda x: 0 if x[0]<0.5 else 1, preds2)))
 print(pred_test_cl2[:5])
 
 prob_outputs2 = {
@@ -178,13 +178,13 @@ plt.show()
 
 # Test difference between models with McNemar's test
 # HNN vs Image CNN
-preds1 = np.array(list(map(lambda x: 0 if x[0]<0.5 else 1, preds1)))
-preds2 = np.array(list(map(lambda x: 0 if x[0]<0.5 else 1, preds2)))
-y_test = np.array(list(map(lambda x: 0 if x<0.5 else 1, y_test)))
+preds1 = np.array(list(map(lambda x: 0 if x<0.5 else 1, preds1)))
+preds2 = np.array(list(map(lambda x: 0 if x<0.5 else 1, preds2)))
+lr_preds = np.array(list(map(lambda x: 0 if x<0.5 else 1, lr_preds)))
 print("Evaluate HNN vs Image CNN...")
 tb = mcnemar_table(y_target=y_test,
-                   y_model1=preds1,
-                   y_model2=preds2)
+                   y_model1=pred_test_cl1,
+                   y_model2=pred_test_cl2)
 chi2, p = mcnemar(ary=tb, corrected=True)
 print('chi-squared:', chi2)
 print('p-value:', p)
@@ -193,7 +193,7 @@ print('p-value:', p)
 print("Evaluate HNN vs Logistic Regression...")
 tb = mcnemar_table(y_target=y_test,
                    y_model1=lr_preds,
-                   y_model2=preds2)
+                   y_model2=pred_test_cl2)
 chi2, p = mcnemar(ary=tb, corrected=True)
 print('chi-squared:', chi2)
 print('p-value:', p)
@@ -201,7 +201,7 @@ print('p-value:', p)
 # Image CNN vs LG
 print("Evaluate Image CNN vs Logistic Regression")
 tb = mcnemar_table(y_target=y_test,
-                   y_model1=preds1,
+                   y_model1=pred_test_cl1,
                    y_model2=lr_preds)
 chi2, p = mcnemar(ary=tb, corrected=True)
 print('chi-squared:', chi2)
