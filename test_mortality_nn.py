@@ -178,8 +178,6 @@ plt.show()
 
 # Test difference between models with McNemar's test
 # HNN vs Image CNN
-preds1 = np.array(list(map(lambda x: 0 if x<0.5 else 1, preds1)))
-preds2 = np.array(list(map(lambda x: 0 if x<0.5 else 1, preds2)))
 lr_preds = np.array(list(map(lambda x: 0 if x<0.5 else 1, lr_preds)))
 print("Evaluate HNN vs Image CNN...")
 tb = mcnemar_table(y_target=y_test,
