@@ -155,7 +155,6 @@ def load_lge_images(directory, df, im_size):
                         mat_2c = findWholeWord('2ch')(str(dicom_series))
                         mat_3c = findWholeWord('3ch')(str(dicom_series))
                         mat_4c = findWholeWord('4ch')(str(dicom_series))
-                        #sa = []
 
                         if mat_2c:
                             images = range(len(img[:, ]))
@@ -189,7 +188,6 @@ def load_lge_images(directory, df, im_size):
                                 bun_4c.append(img)
                         else:
                             images = range(len(img[:, ]))
-                            print(len(images))
                             l = len(images) // 3
                             if len(images) > 25:
                                 img = img[l:l+10]
