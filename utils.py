@@ -81,49 +81,133 @@ def load_perf_data(directory, df, im_size):
     return (info_df)
 
 
-def load_lge_data(directory, df, im_size):
-    """
-    Args:
-     directory: the path to the folder where dicom images are stored
-    Return:
-        list of images and indices
-    """
+def findWholeWord(w):
+    return re.compile(r'\b({0})\b'.format(w), flags=re.IGNORECASE).search
 
-    images = []
+def load_lge_images(directory, df, im_size):
+    Images = []
     indices = []
+    # outliers = []
 
     # Loop over folders and files
     for root, dirs, files in os.walk(directory, topdown=True):
         if '.DS_Store' in files:
             files.remove('.DS_Store')
         for dir in dirs:
-            imgList = []
             folder_strip = dir.rstrip('_')
             dir_path = os.path.join(directory, dir)
-            files = os.listdir(dir_path)
-            for file in files:
-                file_name = os.path.basename(file)
-                file_name = file_name[:file_name.find('.')]
+            files = sorted(os.listdir(dir_path))
+            print("\nWorking on ", folder_strip)
+            # Loop over cases with single dicoms
+            if len(files) > 5:
+                imgList_2ch = []
+                imgList_3ch = []
+                imgList_4ch = []
+                bun_2c = []
+                bun_3c = []
+                bun_4c = []
+                bun_sa = []
+                for file in files:
+                    if not file.startswith('.'):
+                        dicom = pydicom.read_file(os.path.join(dir_path, file))
+                        dicom_series = dicom.SeriesDescription
+                        dicom_series = dicom_series.split('_')
+                        #print(dicom_series)
+                        img = dicom.pixel_array
+                        img = resize(img, (im_size, im_size))
+                        mat_2c = findWholeWord('2ch')(str(dicom_series))
+                        mat_3c = findWholeWord('3ch')(str(dicom_series))
+                        mat_4c = findWholeWord('4ch')(str(dicom_series))
+                        sa = []
 
-                if file_name in ('1_1', '2_1', '3_1'):
-                    img = mpimg.imread(os.path.join(dir_path, file))
-                    img = resize(img, (im_size, im_size))
-                    imgList.append(img)
+                        if mat_2c:
+                            bun_2c.append(img)
+                        elif mat_3c:
+                            bun_3c.append(img)
+                        elif mat_4c:
+                            bun_4c.append(img)
+                        else:
+                            sa.append(img)
+                        bun_sa.append(np.squeeze(sa))
 
-                else:
-                    continue
+                l = len(bun_sa) // 3
+                imgList_sa = (bun_sa[l:l+10] if len(bun_sa) > 25 else bun_sa[1:11])
+                imgList_2ch.append(bun_2c[0]) if len(bun_2c) == 1 else imgList_2ch.append(bun_2c[1])
+                imgList_3ch.append(bun_3c[0]) if len(bun_3c) == 1 else imgList_3ch.append(bun_3c[1])
+                imgList_4ch.append(bun_4c[0]) if len(bun_4c) == 1 else imgList_4ch.append(bun_4c[1])
+                imgList = imgList_sa + imgList_2ch + imgList_3ch + imgList_4ch
+                imgStack = np.stack(imgList, axis=2)
+                Images.append(imgStack)
 
-            images.append(imgList)
+            # Loop over cases with stacked dicoms
+            else:
+                bun_2c = []
+                bun_3c = []
+                bun_4c = []
+                bun_sa = []
+                for file in files:
+                    if not file.startswith('.'):
+                        dicom = pydicom.read_file(os.path.join(dir_path, file))
+                        dicom_series = dicom.SeriesDescription
+                        dicom_series = dicom_series.split('_')
+                        #print(dicom_series)
+                        img = dicom.pixel_array
+                        mat_2c = findWholeWord('2ch')(str(dicom_series))
+                        mat_3c = findWholeWord('3ch')(str(dicom_series))
+                        mat_4c = findWholeWord('4ch')(str(dicom_series))
+                        #sa = []
+
+                        if mat_2c:
+                            images = range(len(img[:, ]))
+                            if len(images) > 1:
+                                img = img[1]
+                                img = resize(img, (im_size, im_size))
+                                bun_2c.append(img)
+                            else:
+                                img = img[0]
+                                img = resize(img, (im_size, im_size))
+                                bun_2c.append(img)
+                        elif mat_3c:
+                            images = range(len(img[:, ]))
+                            if len(images) > 1:
+                                img = img[1]
+                                img = resize(img, (im_size, im_size))
+                                bun_3c.append(img)
+                            else:
+                                img = img[0]
+                                img = resize(img, (im_size, im_size))
+                                bun_3c.append(img)
+                        elif mat_4c:
+                            images = range(len(img[:, ]))
+                            if len(images) > 1:
+                                img = img[1]
+                                img = resize(img, (im_size, im_size))
+                                bun_4c.append(img)
+                            else:
+                                img = img[0]
+                                img = resize(img, (im_size, im_size))
+                                bun_4c.append(img)
+                        else:
+                            images = range(len(img[:, ]))
+                            print(len(images))
+                            l = len(images) // 3
+                            if len(images) > 25:
+                                img = img[l:l+10]
+                                for i in img[:]:
+                                    img = resize(i, (im_size, im_size))
+                                    bun_sa.append(img)
+                            else:
+                                img = img[1:11]
+                                for i in img[:]:
+                                    img = resize(i, (im_size, im_size))
+                                    bun_sa.append(img)
+
+                imgList = bun_sa + bun_2c + bun_3c + bun_4c
+                imgStack = np.stack(imgList, axis=2)
+                #print(imgStack.shape)
+                Images.append(imgStack)
+                
             indices.append(int(folder_strip))
-
-    Images = []
-    for image_list in images:
-        img = cv2.vconcat(image_list)
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        gray = resize(gray, (672, 224))
-        out = cv2.merge([gray, gray, gray])
-        #out = gray[..., np.newaxis]
-        Images.append(out)
 
     idx_df = pd.DataFrame(indices, columns=['ID'])
     idx_df['LGE'] = Images
