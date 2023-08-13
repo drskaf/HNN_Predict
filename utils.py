@@ -229,207 +229,366 @@ def load_perf_images(directory, df, im_size):
             print("\nWorking on ", folder_strip)
             # Loop over cases with single dicoms
             if len(files) > 2:
-                Avideo = []
-                Mvideo = []
-                Bvideo = []
-                videoraw = []
-                VidGroup = []
-                Location = []
-                for file in files:
-                    if not file.startswith('.'):
-                        dicom = pydicom.read_file(os.path.join(dir_path, file))
-                        location = dicom.SliceLocation
-                        img = dicom.pixel_array
-                        img = centre_crop(img)
-                        img = resize(img, (im_size, im_size))
-                        VidGroup.append([img, location])
-                        Location.append(location)
-                        videoraw.append(dicom)
+                if 'SliceLocation' in pydicom.read_file(os.path.join(dir_path, files[0]), force=True):
+                    Avideo = []
+                    Mvideo = []
+                    Bvideo = []
+                    videoraw = []
+                    VidGroup = []
+                    Location = []
+                    for file in files:
+                        if not file.startswith('.'):
+                            dicom = pydicom.read_file(os.path.join(dir_path, file))
+                            location = dicom.SliceLocation
+                            img = dicom.pixel_array
+                            img = centre_crop(img)
+                            img = resize(img, (im_size, im_size))
+                            VidGroup.append([img, location])
+                            Location.append(location)
+                            videoraw.append(dicom)
 
-                for vid, loc in VidGroup:
-                    if loc == np.max(Location):
-                        Bvideo.append(vid)
-                    elif loc == np.min(Location):
-                        Avideo.append(vid)
-                    else:
-                        Mvideo.append(vid)
-                video = Avideo + Mvideo + Bvideo
-                test = {}
-                keys = range(len(video))
-                # Define series with AIF frames
-                for k in keys:
-                    # Calculate image sharpness
-                    img = centre_crop(video[k])
-                    gy, gx = np.gradient(img)
-                    gnorm = np.sqrt(gx ** 2, gy ** 2)
-                    sharp = np.average(gnorm)
-                    test[k] = sharp
-                aif_f = len(video) // 4
-                aif_sharp = np.sum(list(test.values())[:aif_f])
-                nonaif_sharp = np.sum(list(test.values())[aif_f + 1:2 * aif_f])
-                if aif_sharp < nonaif_sharp // 2:
-                    '''Work on series with AIF frames'''
-                    # Initiate dictionaries for 4 groups of AIF, apical, mid and basal LV level
-                    # both for pixel sum values and pixel peak values for each frame
-                    aif_tot = {}
-                    a_tot = {}
-                    m_tot = {}
-                    b_tot = {}
-                    f = len(video) // 4
-                    # Loop over the keys and calculate the sum and peak pixel values for each frame
+                    for vid, loc in VidGroup:
+                        if loc == np.max(Location):
+                            Bvideo.append(vid)
+                        elif loc == np.min(Location):
+                            Avideo.append(vid)
+                        else:
+                            Mvideo.append(vid)
+                    video = Avideo + Mvideo + Bvideo
+                    test = {}
+                    keys = range(len(video))
+                    # Define series with AIF frames
                     for k in keys:
-                        img = centre_crop(video[0][k])
-                        sum = np.sum(img)
-                        # Collect frames from the first group of slices
-                        if k <= f:
-                            aif_tot[k] = sum
-                        # Collect frames from the second group of slices
-                        elif k > f and k <= 2 * f:
-                            a_tot[k] = sum
-                        elif k > 2 * f and k <= 3 * f:
-                            m_tot[k] = sum
-                        # Collect frames from the third group of slices
-                        else:
-                            b_tot[k] = sum
-
-                    aif_5max = {}
-                    a_5max = {}
-                    m_5max = {}
-                    b_5max = {}
-                    for k, v in aif_tot.items():
-                        if k >= 5 and k < (f - 3):
-                            value = aif_tot[k - 2] + aif_tot[k - 1] + aif_tot[k] + aif_tot[k + 1] + aif_tot[k + 2]
-                            aif_5max[k] = value
-                        else:
-                            aif_5max[k] = 0
-                    aif_max_value = list(aif_5max.values())
-                    aif_max_key = [key for key, value in aif_5max.items() if value == np.max(aif_max_value)]
-                    aif_l = aif_max_key.pop()
-                    for k, v in a_tot.items():
-                        if k >= 5 + f and k < (2 * f - 3):
-                            value = a_tot[k - 2] + a_tot[k - 1] + a_tot[k] + a_tot[k + 1] + a_tot[k + 2]
-                            a_5max[k] = value
-                        else:
-                            a_5max[k] = 0
-                    a_max_value = list(a_5max.values())
-                    a_max_key = [key for key, value in a_5max.items() if value == np.max(a_max_value)]
-                    a_l = a_max_key.pop()
-                    for k, v in m_tot.items():
-                        if k >= 5 + 2 * f and k < (3 * f - 3):
-                            value = m_tot[k - 2] + m_tot[k - 1] + m_tot[k] + m_tot[k + 1] + m_tot[k - 2]
-                            m_5max[k] = value
-                        else:
-                            m_5max[k] = 0
-                    m_max_value = list(m_5max.values())
-                    m_max_key = [key for key, value in m_5max.items() if value == np.max(m_max_value)]
-                    m_l = m_max_key.pop()
-                    for k, v in b_tot.items():
-                        if k >= 5 + 3 * f and k < (4 * f - 3):
-                            value = b_tot[k - 2] + b_tot[k - 1] + b_tot[k] + b_tot[k + 1] + b_tot[k + 2]
-                            b_5max[k] = value
-                        else:
-                            b_5max[k] = 0
-                    b_max_value = list(b_5max.values())
-                    b_max_key = [key for key, value in b_5max.items() if value == np.max(b_max_value)]
-                    b_l = b_max_key.pop()
-
-                    slice_dic = {videoraw[a_l].SliceLocation: video[a_l - 1:a_l + 3],
-                                 videoraw[m_l].SliceLocation: video[m_l - 1:m_l + 3],
-                                 videoraw[b_l].SliceLocation: video[b_l - 1:b_l + 3]}
-                    sd = SortedDict(slice_dic)
-                    if len(sd) == 3:
-                        img1 = slice_dic[sd.iloc[0]]
-                        img2 = slice_dic[sd.iloc[1]]
-                        img3 = slice_dic[sd.iloc[2]]
-                        img = np.stack([img1, img2, img3], axis=2)
-                        Images.append(img)
-                        #indices.append(folder_strip)
-                    else:
-                        img1 = video[al-1:a_l + 3]
-                        img2 = video[ml-1:m_l + 3]
-                        img3 = video[b_l-1:b_l + 3]
-                        img = np.stack([img1, img2, img3], axis=2)
-                        Images.append(img)
-                        #indices.append(folder_strip)
-
-                else:
-                    '''Work on series without AIF frames'''
-                    # Initiate dictionaries
-                    a_tot = {}
-                    m_tot = {}
-                    b_tot = {}
-                    f = len(video) // 3
-                    for k in keys:
+                        # Calculate image sharpness
                         img = centre_crop(video[k])
-                        sum = np.sum(img)
-                        # Collect frames from the first group of slices
-                        if k <= f:
-                            a_tot[k] = sum
-                        # Collect frames from the second group of slices
-                        elif k > f and k <= 2 * f:
-                            m_tot[k] = sum
-                        # Collect frames from the third group of slices
-                        else:
-                            b_tot[k] = sum
-                    # Generate a list of peak pixels values then find the key of the frame with the max value,
-                    # this will be followed by 4-5 frames to get the myocardial contrast frame
-                    # This will be done on all 3 groups of slices
-                    # First, identify sequence which performs better with sum pixel rather than peak
-                    a_5max = {}
-                    m_5max = {}
-                    b_5max = {}
-                    # Working on 1st group
-                    for k, v in a_tot.items():
-                        if k >= 5 and k < (f - 3):
-                            value = a_tot[k - 2] + a_tot[k - 1] + a_tot[k] + a_tot[k + 1] + a_tot[k + 2]
-                            a_5max[k] = value
-                        else:
-                            a_5max[k] = 0
-                    a_max_value = list(a_5max.values())
-                    a_max_key = [key for key, value in a_5max.items() if value == np.max(a_max_value)]
-                    a_l = a_max_key.pop()
-                    # Working on 2nd group
-                    for k, v in m_tot.items():
-                        if k >= 3 + f and k < (2 * f - 3):
-                            value = m_tot[k - 2] + m_tot[k - 1] + m_tot[k] + m_tot[k + 1] + m_tot[k + 2]
-                            m_5max[k] = value
-                        else:
-                            m_5max[k] = 0
-                    m_max_value = list(m_5max.values())
-                    m_max_key = [key for key, value in m_5max.items() if value == np.max(m_max_value)]
-                    m_l = m_max_key.pop()
+                        gy, gx = np.gradient(img)
+                        gnorm = np.sqrt(gx ** 2, gy ** 2)
+                        sharp = np.average(gnorm)
+                        test[k] = sharp
+                    aif_f = len(video) // 4
+                    aif_sharp = np.sum(list(test.values())[:aif_f])
+                    nonaif_sharp = np.sum(list(test.values())[aif_f + 1:2 * aif_f])
+                    if aif_sharp < nonaif_sharp // 2:
+                        '''Work on series with AIF frames'''
+                        # Initiate dictionaries for 4 groups of AIF, apical, mid and basal LV level
+                        # both for pixel sum values and pixel peak values for each frame
+                        aif_tot = {}
+                        a_tot = {}
+                        m_tot = {}
+                        b_tot = {}
+                        f = len(video) // 4
+                        # Loop over the keys and calculate the sum and peak pixel values for each frame
+                        for k in keys:
+                            img = centre_crop(video[0][k])
+                            sum = np.sum(img)
+                            # Collect frames from the first group of slices
+                            if k <= f:
+                                aif_tot[k] = sum
+                            # Collect frames from the second group of slices
+                            elif k > f and k <= 2 * f:
+                                a_tot[k] = sum
+                            elif k > 2 * f and k <= 3 * f:
+                                m_tot[k] = sum
+                            # Collect frames from the third group of slices
+                            else:
+                                b_tot[k] = sum
 
-                    # Working on 3rd group
-                    for k, v in b_tot.items():
-                        if k >= 5 + 2 * f and k < (3 * f - 3):
-                            value = b_tot[k - 2] + b_tot[k - 1] + b_tot[k] + b_tot[k + 1] + b_tot[k + 2]
-                            b_5max[k] = value
-                        else:
-                            b_5max[k] = 0
-                    b_max_value = list(b_5max.values())
-                    b_max_key = [key for key, value in b_5max.items() if value == np.max(b_max_value)]
-                    b_l = b_max_key.pop()
+                        aif_5max = {}
+                        a_5max = {}
+                        m_5max = {}
+                        b_5max = {}
+                        for k, v in aif_tot.items():
+                            if k >= 5 and k < (f - 3):
+                                value = aif_tot[k - 2] + aif_tot[k - 1] + aif_tot[k] + aif_tot[k + 1] + aif_tot[k + 2]
+                                aif_5max[k] = value
+                            else:
+                                aif_5max[k] = 0
+                        aif_max_value = list(aif_5max.values())
+                        aif_max_key = [key for key, value in aif_5max.items() if value == np.max(aif_max_value)]
+                        aif_l = aif_max_key.pop()
+                        for k, v in a_tot.items():
+                            if k >= 5 + f and k < (2 * f - 3):
+                                value = a_tot[k - 2] + a_tot[k - 1] + a_tot[k] + a_tot[k + 1] + a_tot[k + 2]
+                                a_5max[k] = value
+                            else:
+                                a_5max[k] = 0
+                        a_max_value = list(a_5max.values())
+                        a_max_key = [key for key, value in a_5max.items() if value == np.max(a_max_value)]
+                        a_l = a_max_key.pop()
+                        for k, v in m_tot.items():
+                            if k >= 5 + 2 * f and k < (3 * f - 3):
+                                value = m_tot[k - 2] + m_tot[k - 1] + m_tot[k] + m_tot[k + 1] + m_tot[k - 2]
+                                m_5max[k] = value
+                            else:
+                                m_5max[k] = 0
+                        m_max_value = list(m_5max.values())
+                        m_max_key = [key for key, value in m_5max.items() if value == np.max(m_max_value)]
+                        m_l = m_max_key.pop()
+                        for k, v in b_tot.items():
+                            if k >= 5 + 3 * f and k < (4 * f - 3):
+                                value = b_tot[k - 2] + b_tot[k - 1] + b_tot[k] + b_tot[k + 1] + b_tot[k + 2]
+                                b_5max[k] = value
+                            else:
+                                b_5max[k] = 0
+                        b_max_value = list(b_5max.values())
+                        b_max_key = [key for key, value in b_5max.items() if value == np.max(b_max_value)]
+                        b_l = b_max_key.pop()
 
-                    slice_dic = {videoraw[a_l].SliceLocation: video[a_l - 1:a_l + 3],
-                                 videoraw[m_l].SliceLocation: video[m_l - 1:m_l + 3],
-                                 videoraw[b_l].SliceLocation: video[b_l - 1:b_l + 3]}
-                    sd = SortedDict(slice_dic)
-                    if len(sd) == 3:
-                        img1 = slice_dic[sd.iloc[0]]
-                        img2 = slice_dic[sd.iloc[1]]
-                        img3 = slice_dic[sd.iloc[2]]
-                        img = img1 + img2 + img3
-                        img = np.stack(img, axis=2)
-                        Images.append(img)
-                        #indices.append(folder_strip)
+                        slice_dic = {videoraw[a_l].SliceLocation: video[a_l - 1:a_l + 3],
+                                     videoraw[m_l].SliceLocation: video[m_l - 1:m_l + 3],
+                                     videoraw[b_l].SliceLocation: video[b_l - 1:b_l + 3]}
+                        sd = SortedDict(slice_dic)
+                        if len(sd) == 3:
+                            img1 = slice_dic[sd.iloc[0]]
+                            img2 = slice_dic[sd.iloc[1]]
+                            img3 = slice_dic[sd.iloc[2]]
+                            img = np.stack([img1, img2, img3], axis=2)
+                            Images.append(img)
+
+                        else:
+                            img1 = video[al - 1:a_l + 3]
+                            img2 = video[ml - 1:m_l + 3]
+                            img3 = video[b_l - 1:b_l + 3]
+                            img = np.stack([img1, img2, img3], axis=2)
+                            Images.append(img)
+
                     else:
+                        '''Work on series without AIF frames'''
+                        # Initiate dictionaries
+                        a_tot = {}
+                        m_tot = {}
+                        b_tot = {}
+                        f = len(video) // 3
+                        for k in keys:
+                            img = centre_crop(video[k])
+                            sum = np.sum(img)
+                            # Collect frames from the first group of slices
+                            if k <= f:
+                                a_tot[k] = sum
+                            # Collect frames from the second group of slices
+                            elif k > f and k <= 2 * f:
+                                m_tot[k] = sum
+                            # Collect frames from the third group of slices
+                            else:
+                                b_tot[k] = sum
+                        # Generate a list of peak pixels values then find the key of the frame with the max value,
+                        # this will be followed by 4-5 frames to get the myocardial contrast frame
+                        # This will be done on all 3 groups of slices
+                        # First, identify sequence which performs better with sum pixel rather than peak
+                        a_5max = {}
+                        m_5max = {}
+                        b_5max = {}
+                        # Working on 1st group
+                        for k, v in a_tot.items():
+                            if k >= 5 and k < (f - 3):
+                                value = a_tot[k - 2] + a_tot[k - 1] + a_tot[k] + a_tot[k + 1] + a_tot[k + 2]
+                                a_5max[k] = value
+                            else:
+                                a_5max[k] = 0
+                        a_max_value = list(a_5max.values())
+                        a_max_key = [key for key, value in a_5max.items() if value == np.max(a_max_value)]
+                        a_l = a_max_key.pop()
+                        # Working on 2nd group
+                        for k, v in m_tot.items():
+                            if k >= 3 + f and k < (2 * f - 3):
+                                value = m_tot[k - 2] + m_tot[k - 1] + m_tot[k] + m_tot[k + 1] + m_tot[k + 2]
+                                m_5max[k] = value
+                            else:
+                                m_5max[k] = 0
+                        m_max_value = list(m_5max.values())
+                        m_max_key = [key for key, value in m_5max.items() if value == np.max(m_max_value)]
+                        m_l = m_max_key.pop()
+
+                        # Working on 3rd group
+                        for k, v in b_tot.items():
+                            if k >= 5 + 2 * f and k < (3 * f - 3):
+                                value = b_tot[k - 2] + b_tot[k - 1] + b_tot[k] + b_tot[k + 1] + b_tot[k + 2]
+                                b_5max[k] = value
+                            else:
+                                b_5max[k] = 0
+                        b_max_value = list(b_5max.values())
+                        b_max_key = [key for key, value in b_5max.items() if value == np.max(b_max_value)]
+                        b_l = b_max_key.pop()
+
+                        slice_dic = {videoraw[a_l].SliceLocation: video[a_l - 1:a_l + 3],
+                                     videoraw[m_l].SliceLocation: video[m_l - 1:m_l + 3],
+                                     videoraw[b_l].SliceLocation: video[b_l - 1:b_l + 3]}
+                        sd = SortedDict(slice_dic)
+                        if len(sd) == 3:
+                            img1 = slice_dic[sd.iloc[0]]
+                            img2 = slice_dic[sd.iloc[1]]
+                            img3 = slice_dic[sd.iloc[2]]
+                            img = img1 + img2 + img3
+                            img = np.stack(img, axis=2)
+                            Images.append(img)
+
+                        else:
+                            img1 = video[a_l - 1:a_l + 3]
+                            img2 = video[m_l - 1:m_l + 3]
+                            img3 = video[b_l - 1:b_l + 3]
+                            img = img1 + img2 + img3
+                            img = np.stack(img, axis=2)
+                            Images.append(img)
+                else:
+                    video = []
+                    for file in files:
+                        if not file.startswith('.'):
+                            dicom = pydicom.read_file(os.path.join(dir_path, file))
+                            img = dicom.pixel_array
+                            img = centre_crop(img)
+                            img = resize(img, (im_size, im_size))
+                            video.append(img)
+
+                    test = {}
+                    keys = range(len(video))
+                    # Define series with AIF frames
+                    for k in keys:
+                        # Calculate image sharpness
+                        img = centre_crop(video[k])
+                        gy, gx = np.gradient(img)
+                        gnorm = np.sqrt(gx ** 2, gy ** 2)
+                        sharp = np.average(gnorm)
+                        test[k] = sharp
+                    aif_f = len(video) // 4
+                    aif_sharp = np.sum(list(test.values())[:aif_f])
+                    nonaif_sharp = np.sum(list(test.values())[aif_f + 1:2 * aif_f])
+                    if aif_sharp < nonaif_sharp // 2:
+                        '''Work on series with AIF frames'''
+                        # Initiate dictionaries for 4 groups of AIF, apical, mid and basal LV level
+                        # both for pixel sum values and pixel peak values for each frame
+                        aif_tot = {}
+                        a_tot = {}
+                        m_tot = {}
+                        b_tot = {}
+                        f = len(video) // 4
+                        # Loop over the keys and calculate the sum and peak pixel values for each frame
+                        for k in keys:
+                            img = centre_crop(video[0][k])
+                            sum = np.sum(img)
+                            # Collect frames from the first group of slices
+                            if k <= f:
+                                aif_tot[k] = sum
+                            # Collect frames from the second group of slices
+                            elif k > f and k <= 2 * f:
+                                a_tot[k] = sum
+                            elif k > 2 * f and k <= 3 * f:
+                                m_tot[k] = sum
+                            # Collect frames from the third group of slices
+                            else:
+                                b_tot[k] = sum
+
+                        aif_5max = {}
+                        a_5max = {}
+                        m_5max = {}
+                        b_5max = {}
+                        for k, v in aif_tot.items():
+                            if k >= 5 and k < (f - 3):
+                                value = aif_tot[k - 2] + aif_tot[k - 1] + aif_tot[k] + aif_tot[k + 1] + aif_tot[
+                                    k + 2]
+                                aif_5max[k] = value
+                            else:
+                                aif_5max[k] = 0
+                        aif_max_value = list(aif_5max.values())
+                        aif_max_key = [key for key, value in aif_5max.items() if value == np.max(aif_max_value)]
+                        aif_l = aif_max_key.pop()
+                        for k, v in a_tot.items():
+                            if k >= 5 + f and k < (2 * f - 3):
+                                value = a_tot[k - 2] + a_tot[k - 1] + a_tot[k] + a_tot[k + 1] + a_tot[k + 2]
+                                a_5max[k] = value
+                            else:
+                                a_5max[k] = 0
+                        a_max_value = list(a_5max.values())
+                        a_max_key = [key for key, value in a_5max.items() if value == np.max(a_max_value)]
+                        a_l = a_max_key.pop()
+                        for k, v in m_tot.items():
+                            if k >= 5 + 2 * f and k < (3 * f - 3):
+                                value = m_tot[k - 2] + m_tot[k - 1] + m_tot[k] + m_tot[k + 1] + m_tot[k - 2]
+                                m_5max[k] = value
+                            else:
+                                m_5max[k] = 0
+                        m_max_value = list(m_5max.values())
+                        m_max_key = [key for key, value in m_5max.items() if value == np.max(m_max_value)]
+                        m_l = m_max_key.pop()
+                        for k, v in b_tot.items():
+                            if k >= 5 + 3 * f and k < (4 * f - 3):
+                                value = b_tot[k - 2] + b_tot[k - 1] + b_tot[k] + b_tot[k + 1] + b_tot[k + 2]
+                                b_5max[k] = value
+                            else:
+                                b_5max[k] = 0
+                        b_max_value = list(b_5max.values())
+                        b_max_key = [key for key, value in b_5max.items() if value == np.max(b_max_value)]
+                        b_l = b_max_key.pop()
+
+                        img1 = video[al - 1:a_l + 3]
+                        img2 = video[ml - 1:m_l + 3]
+                        img3 = video[b_l - 1:b_l + 3]
+                        img = np.stack([img1, img2, img3], axis=2)
+                        Images.append(img)
+
+                    else:
+                        '''Work on series without AIF frames'''
+                        # Initiate dictionaries
+                        a_tot = {}
+                        m_tot = {}
+                        b_tot = {}
+                        f = len(video) // 3
+                        for k in keys:
+                            img = centre_crop(video[k])
+                            sum = np.sum(img)
+                            # Collect frames from the first group of slices
+                            if k <= f:
+                                a_tot[k] = sum
+                            # Collect frames from the second group of slices
+                            elif k > f and k <= 2 * f:
+                                m_tot[k] = sum
+                            # Collect frames from the third group of slices
+                            else:
+                                b_tot[k] = sum
+                        # Generate a list of peak pixels values then find the key of the frame with the max value,
+                        # this will be followed by 4-5 frames to get the myocardial contrast frame
+                        # This will be done on all 3 groups of slices
+                        # First, identify sequence which performs better with sum pixel rather than peak
+                        a_5max = {}
+                        m_5max = {}
+                        b_5max = {}
+                        # Working on 1st group
+                        for k, v in a_tot.items():
+                            if k >= 5 and k < (f - 3):
+                                value = a_tot[k - 2] + a_tot[k - 1] + a_tot[k] + a_tot[k + 1] + a_tot[k + 2]
+                                a_5max[k] = value
+                            else:
+                                a_5max[k] = 0
+                        a_max_value = list(a_5max.values())
+                        a_max_key = [key for key, value in a_5max.items() if value == np.max(a_max_value)]
+                        a_l = a_max_key.pop()
+                        # Working on 2nd group
+                        for k, v in m_tot.items():
+                            if k >= 3 + f and k < (2 * f - 3):
+                                value = m_tot[k - 2] + m_tot[k - 1] + m_tot[k] + m_tot[k + 1] + m_tot[k + 2]
+                                m_5max[k] = value
+                            else:
+                                m_5max[k] = 0
+                        m_max_value = list(m_5max.values())
+                        m_max_key = [key for key, value in m_5max.items() if value == np.max(m_max_value)]
+                        m_l = m_max_key.pop()
+
+                        # Working on 3rd group
+                        for k, v in b_tot.items():
+                            if k >= 5 + 2 * f and k < (3 * f - 3):
+                                value = b_tot[k - 2] + b_tot[k - 1] + b_tot[k] + b_tot[k + 1] + b_tot[k + 2]
+                                b_5max[k] = value
+                            else:
+                                b_5max[k] = 0
+                        b_max_value = list(b_5max.values())
+                        b_max_key = [key for key, value in b_5max.items() if value == np.max(b_max_value)]
+                        b_l = b_max_key.pop()
+
                         img1 = video[a_l - 1:a_l + 3]
                         img2 = video[m_l - 1:m_l + 3]
                         img3 = video[b_l - 1:b_l + 3]
                         img = img1 + img2 + img3
                         img = np.stack(img, axis=2)
                         Images.append(img)
-                        #indices.append(folder_strip)
 
             else:
                 """ EXTRACT PEAK LV frames from stacked dicoms"""
@@ -542,7 +701,7 @@ def load_perf_images(directory, df, im_size):
                                     img = img1 + img2 + img3
                                     img = np.stack(img, axis=2)
                                     Images.append(img)
-                                    #indices.append(folder_strip)
+
                                 else:
                                     img1 = []
                                     for m in video[a_l - 1:a_l + 3]:
@@ -562,7 +721,7 @@ def load_perf_images(directory, df, im_size):
                                     img = img1 + img2 + img3
                                     img = np.stack(img, axis=2)
                                     Images.append(img)
-                                    #indices.append(folder_strip)
+
 
                             else:
                                 img1 = []
@@ -583,7 +742,7 @@ def load_perf_images(directory, df, im_size):
                                 img = img1 + img2 + img3
                                 img = np.stack(img, axis=2)
                                 Images.append(img)
-                                #indices.append(folder_strip)
+
 
                         else:
                             '''Work on series without AIF frames'''
@@ -667,7 +826,7 @@ def load_perf_images(directory, df, im_size):
                                     img = img1 + img2 + img3
                                     img = np.stack(img, axis=2)
                                     Images.append(img)
-                                    #indices.append(folder_strip)
+
                                 else:
                                     img1 = []
                                     for m in video[a_l - 1:a_l + 3]:
@@ -687,7 +846,6 @@ def load_perf_images(directory, df, im_size):
                                     img = img1 + img2 + img3
                                     img = np.stack(img, axis=2)
                                     Images.append(img)
-                                    #indices.append(folder_strip)
 
                             else:
                                 img1 = []
@@ -715,7 +873,6 @@ def load_perf_images(directory, df, im_size):
     info_df = pd.merge(df, idx_df, on=['ID'])
 
     return (info_df)
-
 
 def patient_dataset_splitter(df, patient_key='patient_TrustNumber'):
     '''
