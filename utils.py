@@ -241,6 +241,7 @@ def load_perf_images(directory, df, im_size):
                             dicom = pydicom.read_file(os.path.join(dir_path, file))
                             location = dicom.SliceLocation
                             img = dicom.pixel_array
+                            img = img.astype(np.float32) / img.max()
                             img = centre_crop(img)
                             img = resize(img, (im_size, im_size))
                             VidGroup.append([img, location])
@@ -435,6 +436,7 @@ def load_perf_images(directory, df, im_size):
                         if not file.startswith('.'):
                             dicom = pydicom.read_file(os.path.join(dir_path, file))
                             img = dicom.pixel_array
+                            img = img.astype(np.float32) / img.max()
                             img = centre_crop(img)
                             img = resize(img, (im_size, im_size))
                             video.append(img)
@@ -596,6 +598,7 @@ def load_perf_images(directory, df, im_size):
                     if not file.startswith('.'):
                         videoraw = pydicom.read_file(os.path.join(dir_path, file))
                         video = videoraw.pixel_array
+                        video = video.astype(np.float32) / video.max()
 
                         test = {}
                         keys = range(len(video[:,]))
@@ -848,6 +851,7 @@ def load_perf_images(directory, df, im_size):
                                     Images.append(img)
 
                             else:
+                                #video = np.zeros([int(im_size), int(im_size), 12])
                                 img1 = []
                                 for m in video[a_l - 1:a_l + 3]:
                                     m = centre_crop(m)
@@ -865,6 +869,10 @@ def load_perf_images(directory, df, im_size):
                                     img3.append(m)
                                 img = img1 + img2 + img3
                                 img = np.stack(img, axis=2)
+                                #for m in range(len(img[0,0,:])):
+                                 #   plt.imshow(img[...,m], cmap='gray')
+                                  #  plt.show()
+
                                 Images.append(img)
             indices.append(int(folder_strip))
 
@@ -873,6 +881,7 @@ def load_perf_images(directory, df, im_size):
     info_df = pd.merge(df, idx_df, on=['ID'])
 
     return (info_df)
+    
 
 def patient_dataset_splitter(df, patient_key='patient_TrustNumber'):
     '''
