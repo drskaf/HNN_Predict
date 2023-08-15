@@ -87,7 +87,7 @@ def findWholeWord(w):
 def load_lge_images(directory, df, im_size):
     Images = []
     indices = []
-    # outliers = []
+    #outliers = []
 
     # Loop over folders and files
     for root, dirs, files in os.walk(directory, topdown=True):
@@ -114,10 +114,11 @@ def load_lge_images(directory, df, im_size):
                         dicom_series = dicom_series.split('_')
                         #print(dicom_series)
                         img = dicom.pixel_array
+                        img = img.astype(np.float32) / img.max()
                         img = resize(img, (im_size, im_size))
-                        mat_2c = findWholeWord('2ch')(str(dicom_series))
-                        mat_3c = findWholeWord('3ch')(str(dicom_series))
-                        mat_4c = findWholeWord('4ch')(str(dicom_series))
+                        mat_2c = findWholeWord('2ch.*')(str(dicom_series))
+                        mat_3c = findWholeWord('3ch.*')(str(dicom_series))
+                        mat_4c = findWholeWord('4ch.*')(str(dicom_series))
                         sa = []
 
                         if mat_2c:
@@ -137,7 +138,12 @@ def load_lge_images(directory, df, im_size):
                 imgList_4ch.append(bun_4c[0]) if len(bun_4c) == 1 else imgList_4ch.append(bun_4c[1])
                 imgList = imgList_sa + imgList_2ch + imgList_3ch + imgList_4ch
                 imgStack = np.stack(imgList, axis=2)
+                #print(imgStack.shape)
                 Images.append(imgStack)
+
+                #for im in imgList[:13]:
+                 #   plt.imshow(im, cmap='gray')
+                  #  plt.show()
 
             # Loop over cases with stacked dicoms
             else:
@@ -152,9 +158,10 @@ def load_lge_images(directory, df, im_size):
                         dicom_series = dicom_series.split('_')
                         #print(dicom_series)
                         img = dicom.pixel_array
-                        mat_2c = findWholeWord('2ch')(str(dicom_series))
-                        mat_3c = findWholeWord('3ch')(str(dicom_series))
-                        mat_4c = findWholeWord('4ch')(str(dicom_series))
+                        img = img.astype(np.float32) / img.max()
+                        mat_2c = findWholeWord('2ch.*')(str(dicom_series))
+                        mat_3c = findWholeWord('3ch.*')(str(dicom_series))
+                        mat_4c = findWholeWord('4ch.*')(str(dicom_series))
 
                         if mat_2c:
                             images = range(len(img[:, ]))
@@ -204,7 +211,10 @@ def load_lge_images(directory, df, im_size):
                 imgStack = np.stack(imgList, axis=2)
                 #print(imgStack.shape)
                 Images.append(imgStack)
-                
+
+            #if imgStack.shape[2] != 13:
+             #   outliers.append(folder_strip)
+            #print(outliers)
             indices.append(int(folder_strip))
 
     idx_df = pd.DataFrame(indices, columns=['ID'])
@@ -212,7 +222,7 @@ def load_lge_images(directory, df, im_size):
     info_df = pd.merge(df, idx_df, on=['ID'])
 
     return (info_df)
-
+    
 
 def load_perf_images(directory, df, im_size):
     Images = []
