@@ -68,192 +68,89 @@ def create_mlp(dim, regress=False):
     # return our model
     return model
 
-class LeNet:
-    @staticmethod
-    def build_cnn(height, width, depth, regress=False):
-        # initialize the model
-        model = Sequential()
-        inputShape = (height, width, depth)
+def Inception_block(input_layer, f1, f2_conv1, f2_conv3, f3_conv1, f3_conv5, f4):
+  # Input:
+  # - f1: number of filters of the 1x1 convolutional layer in the first path
+  # - f2_conv1, f2_conv3 are number of filters corresponding to the 1x1 and 3x3 convolutional layers in the second path
+  # - f3_conv1, f3_conv5 are the number of filters corresponding to the 1x1 and 5x5  convolutional layer in the third path
+  # - f4: number of filters of the 1x1 convolutional layer in the fourth path
 
-        # if we are using "channels first", update the input shape
-        if K.image_data_format() == "channels_first":
-            inputShape = (depth, height, width)
+  # 1st path:
+  path1 = Conv2D(filters=f1, kernel_size = (1,1), padding = 'same', activation = 'relu')(input_layer)
 
-        # first set of CONV => RELU => POOL layers
-        model.add(Conv2D(20, (5, 5), padding="same",
-                         input_shape=inputShape))
-        model.add(Activation("relu"))
-        model.add(MaxPool2D(pool_size=(2, 2), strides=(2, 2)))
+  # 2nd path
+  path2 = Conv2D(filters = f2_conv1, kernel_size = (1,1), padding = 'same', activation = 'relu')(input_layer)
+  path2 = Conv2D(filters = f2_conv3, kernel_size = (3,3), padding = 'same', activation = 'relu')(path2)
 
-        # second set of CONV => RELU => POOL layers
-        model.add(Conv2D(50, (5, 5), padding="same"))
-        model.add(Activation("relu"))
-        model.add(MaxPool2D(pool_size=(2, 2), strides=(2, 2)))
+  # 3rd path
+  path3 = Conv2D(filters = f3_conv1, kernel_size = (1,1), padding = 'same', activation = 'relu')(input_layer)
+  path3 = Conv2D(filters = f3_conv5, kernel_size = (5,5), padding = 'same', activation = 'relu')(path3)
 
-        # first (and only) set of FC => RELU layers
-        model.add(Flatten())
-        model.add(Dense(16))
-        model.add(Activation("relu"))
+  # 4th path
+  path4 = MaxPool2D((3,3), strides= (1,1), padding = 'same')(input_layer)
+  path4 = Conv2D(filters = f4, kernel_size = (1,1), padding = 'same', activation = 'relu')(path4)
 
-        # softmax classifier
-        model.add(Dense(4))
-        model.add(Activation("relu"))
+  output_layer = concatenate([path1, path2, path3, path4], axis = -1)
 
-        # check to see if the regression node should be added
-        if regress:
-            model.add(Dense(1, activation="linear"))
+  return output_layer
 
-        # return the constructed network architecture
-        return model
+def GoogLeNet(INPUT_SHAPE, OUTPUT):
+    # input layer
+    input_layer = Input(INPUT_SHAPE)
 
-class MiniVGGNet:
-    @staticmethod
-    def build(height, width, depth):
-        # initialize the model along with the input shape to be
-		# "channels last" and the channels dimension itself
-        model = Sequential()
-        inputShape = (height, width, depth)
-        chanDim = -1
+    # convolutional layer: filters = 64, kernel_size = (7,7), strides = 2
+    X = Conv2D(filters=64, kernel_size=(7, 7), strides=2, padding='valid', activation='relu')(input_layer)
 
-        # if we are using "channels first", update the input shape
-		# and channels dimension
-        if K.image_data_format() == "channels_first":
-            inputShape = (depth, height, width)
-            chanDim = 0
+    # max-pooling layer: pool_size = (3,3), strides = 2
+    X = MaxPool2D(pool_size=(3, 3), strides=2)(X)
 
-        # first CONV => RELU => CONV => RELU => POOL layer set
-        model.add(Conv2D(32, (3, 3), padding="same",
-			input_shape=inputShape))
-        model.add(Activation("relu"))
-        model.add(BatchNormalization(axis=chanDim))
-        model.add(Conv2D(32, (3, 3), padding="same"))
-        model.add(Activation("relu"))
-        model.add(BatchNormalization(axis=chanDim))
-        model.add(MaxPool2D(pool_size=(2, 2)))
-        model.add(Dropout(0.25))
+    # convolutional layer: filters = 64, strides = 1
+    X = Conv2D(filters=64, kernel_size=(1, 1), strides=1, padding='same', activation='relu')(X)
 
-        # second CONV => RELU => CONV => RELU => POOL layer set
-        model.add(Conv2D(64, (3, 3), padding="same"))
-        model.add(Activation("relu"))
-        model.add(BatchNormalization(axis=chanDim))
-        model.add(Conv2D(64, (3, 3), padding="same"))
-        model.add(Activation("relu"))
-        model.add(BatchNormalization(axis=chanDim))
-        model.add(MaxPool2D(pool_size=(2, 2)))
-        model.add(Dropout(0.25))
+    # convolutional layer: filters = 192, kernel_size = (3,3)
+    X = Conv2D(filters=192, kernel_size=(3, 3), padding='same', activation='relu')(X)
 
-        # first (and only) set of FC => RELU layers
-        model.add(Flatten())
-        model.add(Dense(100))
-        model.add(Activation("relu"))
-        model.add(BatchNormalization())
-        model.add(Dropout(0.5))
+    # max-pooling layer: pool_size = (3,3), strides = 2
+    X = MaxPool2D(pool_size=(3, 3), strides=2)(X)
 
-        model.add(Dense(16))
-        model.add(Activation("relu"))
-        model.add(Dense(4))
-        model.add(Activation("relu"))
+    # 1st Inception block
+    X = Inception_block(X, f1=64, f2_conv1=96, f2_conv3=128, f3_conv1=16, f3_conv5=32, f4=32)
 
-        return model
+    # 2nd Inception block
+    X = Inception_block(X, f1=128, f2_conv1=128, f2_conv3=192, f3_conv1=32, f3_conv5=96, f4=64)
 
-class AlexNet:
-    @staticmethod
-    def build(height, width, depth, reg=0.0002):
-        # initialize the model along with the input shape to be
-		# "channels last" and the channels dimension itself
-        model = Sequential()
-        inputShape = (height, width, depth)
-        chanDim = -1
+    # max-pooling layer: pool_size = (3,3), strides = 2
+    X = MaxPool2D(pool_size=(3, 3), strides=2)(X)
 
-        # if we are using "channels first", update the input shape
-		# and channels dimension
-        if K.image_data_format() == "channels_first":
-            inputShape = (depth, height, width)
-            chanDim = 1
+    # 3rd Inception block
+    X = Inception_block(X, f1=192, f2_conv1=96, f2_conv3=208, f3_conv1=16, f3_conv5=48, f4=64)
 
-        # Block #1: first CONV => RELU => POOL layer set
-        model.add(Conv2D(96, (11, 11), strides=(4, 4),
-			input_shape=inputShape, padding="same",
-			kernel_regularizer=l2(reg)))
-        model.add(Activation("relu"))
-        model.add(BatchNormalization(axis=chanDim))
-        model.add(MaxPool2D(pool_size=(3, 3), strides=(2, 2)))
-        model.add(Dropout(0.25))
+    # 4th Inception block
+    X = Inception_block(X, f1=256, f2_conv1=160, f2_conv3=320, f3_conv1=32,
+                        f3_conv5=128, f4=128)
 
-        # Block #2: second CONV => RELU => POOL layer set
-        model.add(Conv2D(256, (5, 5), padding="same",
-			kernel_regularizer=l2(reg)))
-        model.add(Activation("relu"))
-        model.add(BatchNormalization(axis=chanDim))
-        model.add(MaxPool2D(pool_size=(3, 3), strides=(2, 2)))
-        model.add(Dropout(0.25))
+    # max-pooling layer: pool_size = (3,3), strides = 2
+    X = MaxPool2D(pool_size=(3, 3), strides=2)(X)
 
-        # Block #3: CONV => RELU => CONV => RELU => CONV => RELU
-        model.add(Conv2D(384, (3, 3), padding="same",
-			kernel_regularizer=l2(reg)))
-        model.add(Activation("relu"))
-        model.add(BatchNormalization(axis=chanDim))
-        model.add(Conv2D(384, (3, 3), padding="same",
-			kernel_regularizer=l2(reg)))
-        model.add(Activation("relu"))
-        model.add(BatchNormalization(axis=chanDim))
-        model.add(Conv2D(256, (3, 3), padding="same",
-			kernel_regularizer=l2(reg)))
-        model.add(Activation("relu"))
-        model.add(BatchNormalization(axis=chanDim))
-        model.add(MaxPool2D(pool_size=(3, 3), strides=(2, 2)))
-        model.add(Dropout(0.25))
+    # 8th Inception block
+    X = Inception_block(X, f1=256, f2_conv1=160, f2_conv3=320, f3_conv1=32, f3_conv5=128, f4=128)
 
-        # Block #4: first set of FC => RELU layers
-        model.add(Flatten())
-        model.add(Dense(4096, kernel_regularizer=l2(reg)))
-        model.add(Activation("relu"))
-        model.add(BatchNormalization())
-        model.add(Dropout(0.5))
+    # 9th Inception block
+    X = Inception_block(X, f1=384, f2_conv1=192, f2_conv3=384, f3_conv1=48, f3_conv5=128, f4=128)
 
-        # Block #5: second set of FC => RELU layers
-        model.add(Dense(4096, kernel_regularizer=l2(reg)))
-        model.add(Activation("relu"))
-        model.add(BatchNormalization())
-        model.add(Dropout(0.5))
+    # Global Average pooling layer
+    X = GlobalAveragePooling2D(name='GAPL')(X)
 
-        model.add(Flatten())
-        model.add(Dense(100))
-        model.add(Activation("relu"))
-        model.add(BatchNormalization())
-        model.add(Dropout(0.5))
+    # Dropoutlayer
+    X = Dropout(0.4)(X)
 
-        model.add(Dense(16))
-        model.add(Activation("relu"))
-        model.add(Dense(4))
-        model.add(Activation("relu"))
+    # output layer
+    X = Dense(OUTPUT, activation='relu')(X)
 
-        return model
+    # model
+    model = Model(input_layer, X, name='GoogLeNet')
 
-from keras.applications.vgg16 import VGG16
-from keras.applications.resnet import ResNet50
-vgg_model = VGG16(include_top=False, input_shape=(224, 224, 3), weights='imagenet')
-#resnet_model = ResNet50(include_top=False, input_shape=(1344, 224, 3), weights='imagenet')
-
-transfer_layer = vgg_model.get_layer('block5_pool')
-#transfer_layer = resnet_model.get_layer('conv5_block3_out')
-vgg_model = Model(inputs = vgg_model.input, outputs = transfer_layer.output)
-#resnet_model = Model(inputs = resnet_model.input, outputs = transfer_layer.output)
-
-for layer in vgg_model.layers[0:17]:
-    layer.trainable = False
-#for layer in resnet_model.layers:
- #   layer.trainable = False
-my_model = Sequential()
-my_model.add(vgg_model)
-my_model.add(Flatten())
-my_model.add(Dropout(0.5))
-my_model.add(Dense(1024, activation='relu'))
-my_model.add(Dropout(0.5))
-my_model.add(Dense(512, activation='relu'))
-my_model.add(Dropout(0.5))
-my_model.add(Dense(4))
-my_model.add(Activation("relu"))
+    return model
 
 # Loading data
 (df1) = utils.load_perf_images('/Users/ebrahamalskaf/Documents/**PERFUSION_CLASSIFICATION**/STRESS_images', patient_df, INPUT_DIM)
@@ -272,11 +169,6 @@ df['images'] = Imgs
 
 class_weight = {0: 0.5896,
                 1: 3.2892}
-
-#df['Ventricular_tachycardia'] = df['Ventricular_tachycardia_(disorder)_x'].astype('int')
-#df['Ventricular_fibrillation'] = df['Ventricular_fibrillation_(disorder)_x'].astype('int')
-#df['VT'] = df[['Ventricular_tachycardia','Ventricular_fibrillation']].apply(lambda x:'{}'.format(np.max(x)), axis=1)
-#df['VT'] = df['VT'].astype(int)
 
 def process_attributes(df, train, valid):
     continuous = numerical_col_list
@@ -307,23 +199,9 @@ print(tlist.count(1))
 validy = np.array(df_valid[args["target"]])
 vlist = validy.tolist()
 print(vlist.count(1))
-#p_ind_train = df_train[df_train[args["target"]]==1].index.tolist()
-#np_ind_train = df_train[df_train[args["target"]]==0].index.tolist()
-#np_sample_train = sample(np_ind_train, len(p_ind_train))
-#df_train = df_train.loc[p_ind_train + np_sample_train]
-#trainy = np.array(df_train[args["target"]])
-#p_ind_valid = df_valid[df_valid[args["target"]]==1].index.tolist()
-#np_ind_valid = df_valid[df_valid[args["target"]]==0].index.tolist()
-#np_sample_valid = sample(np_ind_valid, ((len(df_valid) - vlist.count(1)) // vlist.count(1))*len(p_ind_valid))
-#df_valid = df_valid.loc[p_ind_valid + np_sample_valid]
-#validy = np.array(df_valid[args["target"]])
-#X_train1 = np.array([x1 for x1 in df_train['Perf']])
-#X_train2 = np.array([x2 for x2 in df_train['LGE']])
-#trainImages = np.hstack((X_train1, X_train2))
-
-X_train = np.array([x for x in df_train['images']])
+X_train = np.array([x for x in df_train['LGE']])
 print(X_train.shape)
-X_valid = np.array([x for x in df_valid['images']])
+X_valid = np.array([x for x in df_valid['LGE']])
 print(X_valid.shape)
 print(trainy[:10])
 print(validy[:10])
@@ -332,22 +210,12 @@ train_gen = ImageDataGenerator(rotation_range=10,
                          width_shift_range=0.1,
                          height_shift_range=0.1, shear_range=0.1, zoom_range
                          =0.1, horizontal_flip=True, fill_mode="nearest")
-trainImages = train_gen.flow(X_train, batch_size=1000)
+trainImages = train_gen.flow(X_train, batch_size=2000)
 trainImagesX = trainImages.next()
 
 valid_gen = ImageDataGenerator()
-validImages = valid_gen.flow(X_valid, batch_size=500)
+validImages = valid_gen.flow(X_valid, batch_size=1000)
 validImagesX = validImages.next()
-
-#trainAttrX = df_train[categorical_col_list + numerical_col_list]
-#trainAttrX = np.array(trainAttrX)
-#validAttrX = df_valid[categorical_col_list + numerical_col_list]
-#validAttrX = np.array(validAttrX)
-#scaler = StandardScaler()
-#trainAttrX = scaler.fit_transform(trainAttrX)
-#validAttrX = scaler.transform(validAttrX)
-#trainAttrX = np.clip(trainAttrX, -5, 5)
-#validAttrX = np.clip(validAttrX, -5, 5)
 (trainAttrX, validAttrX) = process_attributes(df, df_train, df_valid)
 
 # create the MLP and CNN models
@@ -364,7 +232,6 @@ x = Dense(N_CLASSES, activation="sigmoid")(x)
 # input and images on the CNN input, outputting a single value (outcome
 # prediction)
 model = Model(inputs=[mlp.input, cnn.input], outputs=x)
-#ann_viz(model, view=True, filename='model_tree', title='HNN')
 
 # compile the model using binary categorical cross-entropy given that
 # we have binary classes of either the prediction is positive or negative
@@ -384,15 +251,10 @@ model.compile(loss="binary_crossentropy", optimizer=opt, metrics=METRICS)
 #print(model.predict([trainAttrX, trainImagesX][:10]))
 weigth_path = "{}_my_model.best.hdf5".format("HNN_GoogleNet")
 checkpoint = ModelCheckpoint(weigth_path, monitor='val_prc', save_best_only=True, mode='max', save_weights_only=False)
-def scheduler(epoch, lr):
-  if epoch < 10:
-    return lr
-  else:
-    return lr * tf.math.exp(-0.1)
 early_stopping = EarlyStopping(
     monitor='val_prc',
     verbose=1,
-    patience=40,
+    patience=50,
     mode='max',
     restore_best_weights=True)
 callback = LearningRateScheduler(scheduler)
