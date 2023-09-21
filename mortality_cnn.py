@@ -46,26 +46,6 @@ except AttributeError:
 else:
     ssl._create_default_https_context = _create_unverified_https_context
 
-from keras.applications.vgg16 import VGG16
-
-model = VGG16(include_top=False, input_shape=(1344, 224, 3), weights='imagenet')
-
-transfer_layer = model.get_layer('block5_pool')
-vgg_model = Model(inputs=model.input, outputs=transfer_layer.output)
-
-for layer in vgg_model.layers[0:17]:
-    layer.trainable = False
-    
-my_model = Sequential()
-my_model.add(vgg_model)
-my_model.add(Flatten())
-my_model.add(Dropout(0.5))
-my_model.add(Dense(1024, activation='relu'))
-my_model.add(Dropout(0.5))
-my_model.add(Dense(512, activation='relu'))
-my_model.add(Dropout(0.5))
-my_model.add(Dense(1, activation='sigmoid'))
-
 gpus = tf.config.list_physical_devices('GPU')
 if gpus:
     for gpu in gpus:
@@ -88,14 +68,10 @@ class_weight = {0: 0.595,
 
 # Splitting data
 (df_train, df_valid) = train_test_split(df, train_size=0.7, stratify=df[args["target"]])
-X_train1 = np.array([x1 for x1 in df_train['Perf']])
-X_train2 = np.array([x2 for x2 in df_train['LGE']])
-X_train = np.hstack((X_train1, X_train2))
+X_train = np.array([x for x in df_train['images']])
 print(X_train.shape)
-X_valid1 = np.array([x1 for x1 in df_valid['Perf']])
-X_valid2 = np.array([x2 for x2 in df_valid['LGE']])
-X_valid = np.hstack((X_valid1, X_valid2))
-
+X_valid = np.array([x for x in df_valid['images']])
+print(X_valid.shape)
 y_train = np.array(df_train.pop(args["target"]))
 tlist = y_train.tolist()
 print(tlist.count(1))
@@ -106,12 +82,12 @@ print(y_train[:10])
 print(y_valid[:10])
 
 # Data augmentation
-aug = ImageDataGenerator(samplewise_center=True, samplewise_std_normalization=True, rotation_range=20,
+aug = ImageDataGenerator(rotation_range=20,
                          width_shift_range=0.1,
                          height_shift_range=0.1, shear_range=0.2, zoom_range
                          =0.2, horizontal_flip=True, fill_mode="nearest")
 
-v_aug = ImageDataGenerator(samplewise_center=True, samplewise_std_normalization=True)
+v_aug = ImageDataGenerator()
 
 # Initialise the optimiser and model
 print("[INFO] compiling model ...")
@@ -129,12 +105,12 @@ METRICS = [
     tf.keras.metrics.AUC(name='prc', curve='PR'),  # precision-recall curve
 ]
 
-weigth_path = "{}_my_model.best.hdf5".format("image_mortality_VGG19")
+weigth_path = "{}_my_model.best.hdf5".format("image_mortality_AlexNet")
 checkpoint = ModelCheckpoint(weigth_path, monitor='val_prc', save_best_only=True, mode='max', save_weights_only=False)
 early_stopping = tf.keras.callbacks.EarlyStopping(
     monitor='val_prc',
     verbose=1,
-    patience=20,
+    patience=50,
     mode='max',
     restore_best_weights=True)
 callback = LearningRateScheduler(scheduler)
@@ -144,8 +120,9 @@ tensorboard_callback = TensorBoard(log_dir=logdir, histogram_freq=1)
 
 # Training the model
 # print("[INFO] Training the model ...")
-my_model.compile(loss= Loss, optimizer=Opt, metrics=METRICS)
-history = my_model.fit_generator(aug.flow(X_train, y_train, batch_size=BATCH_SIZE), validation_data=v_aug.flow(X_valid, y_valid),
+image_model = tf_cnns.AlexNet(HEIGHT, WIDTH, DEPTH, N_CLASSES, reg=0.0002)
+image_model.compile(loss= Loss, optimizer=Opt, metrics=METRICS)
+history = image_model.fit_generator(aug.flow(X_train, y_train, batch_size=BATCH_SIZE), validation_data=v_aug.flow(X_valid, y_valid),
                           epochs=NUM_EPOCHS,
                           callbacks=[early_stopping, checkpoint, tensorboard_callback], class_weight=class_weight)
 
@@ -161,8 +138,8 @@ plt.legend(['train f1 curve', 'validation f1 curve', 'train loss', 'validation l
 plt.show()
 
 # Saving model data
-model_json = my_model.to_json()
-with open("image_mortality_VGG19.json", "w") as json_file:
+model_json = image_model.to_json()
+with open("image_mortality_AlexNet.json", "w") as json_file:
     json_file.write(model_json)
 
 K.clear_session()
