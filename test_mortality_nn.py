@@ -14,13 +14,16 @@ from keras.models import model_from_json, load_model
 import matplotlib.image as mpimg
 from skimage.transform import resize
 import cv2
-from sklearn.metrics import roc_auc_score, accuracy_score, f1_score, roc_curve, classification_report, precision_recall_curve, average_precision_score
+from sklearn.metrics import roc_auc_score, accuracy_score, f1_score, roc_curve, classification_report, precision_recall_curve, average_precision_score, precision_score, recall_score
 import pickle
 from random import sample
 from sklearn.model_selection import train_test_split
 import utils
 from sklearn.preprocessing import StandardScaler
 import tempfile
+from statsmodels.stats.contingency_tables import mcnemar
+from mlxtend.evaluate import mcnemar_table, mcnemar
+from sklearn.metrics import RocCurveDisplay, auc, confusion_matrix, ConfusionMatrixDisplay
 
 # Load info file
 patient_df = pd.read_csv('/Users/ebrahamalskaf/Documents/final_surv.csv')
@@ -28,27 +31,35 @@ patient_df['Gender'] = patient_df['patient_GenderCode_x'].astype('category')
 patient_df['Gender'] = patient_df['Gender'].cat.codes
 
 # Load images
-(df1) = utils.load_perf_data('/Users/ebrahamalskaf/Documents/**PERFUSION_CLASSIFICATION**/peak_LV_test', patient_df, 224)
-(df2) = utils.load_lge_data('/Users/ebrahamalskaf/Documents/**LGE_CLASSIFICATION**/lge_test', patient_df, 224)
+(df1) = utils.load_perf_images('/Users/ebrahamalskaf/Documents/**PERFUSION_CLASSIFICATION**/STRESS_test', patient_df, 224)
+(df2) = utils.load_lge_images('/Users/ebrahamalskaf/Documents/**LGE_CLASSIFICATION**/LGE_test', patient_df, 224)
 df = df1.merge(df2, on='ID')
 print(len(df))
-X_test1 = np.array([x1 for x1 in df['Perf']])
-X_test2 = np.array([x2 for x2 in df['LGE']])
-testX = np.hstack((X_test1, X_test2))
+perf_imgs = np.array([x for x in df['Perf']])
+lge_imgs = np.array([x for x in df['LGE']])
+Imgs = []
+for p, l in zip(perf_imgs, lge_imgs):
+    i = np.block([p,l])
+    Imgs.append(i)
+df['images'] = Imgs
+testX = np.array([x for x in df['images']])
+print(testX.shape)
 
 # Load trained image model
-json_file = open('models/Image_CNN/image_mortality_VGG19.json','r')
+json_file = open('models/Image_CNN/image_AlexNet.json','r')
 model1_json = json_file.read()
 json_file.close()
 model1 = model_from_json(model1_json)
-model1.load_weights("models/Image_CNN/image_mortality_VGG19_my_model.best.hdf5")
+model1.load_weights("models/Image_CNN/image_AlexNet_my_model.best.hdf5")
 
 # Predict with model
 preds1 = model1.predict(testX)
-pred_test_cl1 = np.array(list(map(lambda x: 0 if x<0.5 else 1, preds1)))
-print(pred_test_cl1[:5])
+print(preds1[:5])
 survival_yhat = np.array(df['Event_x'])
 print(survival_yhat[:5])
+precision, recall, thresholds = precision_recall_curve(survival_yhat, preds1[:,0])
+pred_test_cl1 = np.array(list(map(lambda x: 0 if x<np.mean(thresholds) else 1, preds1)))
+print(pred_test_cl1[:5])
 
 prob_outputs1 = {
     "pred": pred_test_cl1,
@@ -59,19 +70,28 @@ print(prob_output_df1.head())
 
 # Evaluate model
 print(classification_report(survival_yhat, pred_test_cl1))
-print('Image CNN ROCAUC score:',roc_auc_score(survival_yhat, pred_test_cl1))
+print('Image CNN ROCAUC score:',roc_auc_score(survival_yhat, preds1[:,0]))
 print('Image CNN Accuracy score:',accuracy_score(survival_yhat, pred_test_cl1))
-print('Image CNN F1 score:',f1_score(survival_yhat, pred_test_cl1))
+print('Image CNN Precision:', np.mean(precision))
+print('Image CNN recall:', np.mean(recall))
+print('Image CNN F1 Score:',average_precision_score(survival_yhat, preds1[:,0]))
+
+# plot confusion matrix
+cm = confusion_matrix(survival_yhat, pred_test_cl1)
+disp = ConfusionMatrixDisplay(confusion_matrix=cm)
+disp.plot()
+plt.show()
+
 
 # Load trained mixed model
 # Define columns
-categorical_col_list = ['Chronic_kidney_disease_(disorder)_x','Essential_hypertension_x', 'Gender_x', 'Heart_failure_(disorder)_x', 'Smoking_history_x',
+categorical_col_listm = ['Chronic_kidney_disease_(disorder)_x','Essential_hypertension_x', 'Gender_x', 'Heart_failure_(disorder)_x', 'Smoking_history_x',
 'Dyslipidaemia_x', 'Myocardial_infarction_(disorder)_x', 'Diabetes_mellitus_(disorder)_x', 'Cerebrovascular_accident_(disorder)_x']
-numerical_col_list= ['Age_on_20.08.2021_x_x', 'LVEF_(%)_x']
+numerical_col_listm= ['Age_on_20.08.2021_x_x', 'LVEF_(%)_x']
 
 def process_attributes(df):
-    continuous = numerical_col_list
-    categorical = categorical_col_list
+    continuous = numerical_col_listm
+    categorical = categorical_col_listm
     cs = MinMaxScaler()
     testContinuous = cs.fit_transform(df[continuous])
 
@@ -85,20 +105,31 @@ def process_attributes(df):
 
     return (testX)
 
-testImageX = testX
+#(df1) = load_label_png('/Users/ebrahamalskaf/Documents/**PERFUSION_CLASSIFICATION**/peak_LV_test', patient_df, 224)
+#(df2) = load_lge_data('/Users/ebrahamalskaf/Documents/**LGE_CLASSIFICATION**/lge_test', patient_df, 224)
+#df = df1.merge(df2, on='ID')
+#print(len(df))
+#X_test1 = np.array([x1 for x1 in df['Perf']])
+#X_test2 = np.array([x2 for x2 in df['LGE']])
+#t_aug = ImageDataGenerator(samplewise_center=True,samplewise_std_normalization=True)
+#testX = t_aug.flow(testX, batch_size=1000)
+#testX = testX.next()
+testImageX = testX #np.hstack((X_test1, X_test2)) / 255.0
+
 testAttrX = process_attributes(df)
 testAttrX = np.array(testAttrX)
 
 # Load model
-json_file = open('models/HNN/mixed_mortality_VGG19.json','r')
+json_file = open('models/HNN/HNN_GoogleNet.json','r')
 model2_json = json_file.read()
 json_file.close()
 model2 = model_from_json(model2_json)
-model2.load_weights('models/HNN/mixed_mortality_VGG19_my_model.best.hdf5')
+model2.load_weights('models/HNN/HNN_GoogleNet_my_model.best.hdf5')
 
 # Predict with model
 preds2 = model2.predict([testAttrX, testImageX])
-pred_test_cl2 = np.array(list(map(lambda x: 0 if x<0.5 else 1, preds2)))
+precision, recall, thresholds = precision_recall_curve(survival_yhat, preds2[:,0])
+pred_test_cl2 = np.array(list(map(lambda x: 0 if x<np.mean(thresholds) else 1, preds2)))
 print(pred_test_cl2[:5])
 
 prob_outputs2 = {
@@ -111,18 +142,27 @@ print(prob_output_df2.head())
 
 # Evaluate model
 print(classification_report(survival_yhat, pred_test_cl2))
-print('HNN ROCAUC score:',roc_auc_score(survival_yhat, pred_test_cl2))
+print('HNN ROCAUC score:',roc_auc_score(survival_yhat, preds2[:,0]))
 print('HNN Accuracy score:',accuracy_score(survival_yhat, pred_test_cl2))
-print('HNN F1 score:',f1_score(survival_yhat, pred_test_cl2))
+print('HNN Precision:', np.mean(precision))
+print('HNN recall:', np.mean(recall))
+print('HNN F1 Score:',average_precision_score(survival_yhat, preds2[:,0]))
+
+# plot confusion matrix
+cm = confusion_matrix(survival_yhat, pred_test_cl2)
+disp = ConfusionMatrixDisplay(confusion_matrix=cm)
+disp.plot()
+plt.show()
 
 # Train ML model on clinical data
 # Define data file
-categorical_col_listc = ['Essential_hypertension', 'Gender', 'Smoking_history',
-'Dyslipidaemia', 'Diabetes_mellitus_(disorder)']
-numerical_col_listc= ['Age_on_20.08.2021_x']
+#patient_df = pd.read_csv('/Users/ebrahamalskaf/Documents/patient_info.csv')
+categorical_col_listc = ['Chronic_kidney_disease_(disorder)','Essential_hypertension', 'Gender', 'Heart_failure_(disorder)', 'Smoking_history',
+'Dyslipidaemia', 'Myocardial_infarction_(disorder)', 'Diabetes_mellitus_(disorder)', 'Cerebrovascular_accident_(disorder)']
+numerical_col_listc= ['LVEF_(%)']
 
-dir_1 = os.listdir('/Users/ebrahamalskaf/Documents/**PERFUSION_CLASSIFICATION**/peak_LV_images')
-dir_2 = os.listdir('/Users/ebrahamalskaf/Documents/**LGE_CLASSIFICATION**/lge_img')
+dir_1 = os.listdir('/Users/ebrahamalskaf/Documents/**PERFUSION_CLASSIFICATION**/STRESS_images')
+dir_2 = os.listdir('/Users/ebrahamalskaf/Documents/**LGE_CLASSIFICATION**/LGE_images')
 
 dirOne = []
 dirTwo = []
@@ -164,23 +204,63 @@ def process_attributes(df):
 
     return (testX)
 
+categorical_col_listm = ['Chronic_kidney_disease_(disorder)_x','Essential_hypertension_x', 'Gender_x', 'Heart_failure_(disorder)_x', 'Smoking_history_x',
+'Dyslipidaemia_x', 'Myocardial_infarction_(disorder)_x', 'Diabetes_mellitus_(disorder)_x', 'Cerebrovascular_accident_(disorder)_x']
+numerical_col_listm= ['LVEF_(%)_x']
+
+def process_attribute(df):
+    continuous = numerical_col_listm
+    categorical = categorical_col_listm
+    cs = MinMaxScaler()
+    testContinuous = cs.fit_transform(df[continuous])
+
+    # One-hot encode categorical data
+    catBinarizer = LabelBinarizer().fit(df[categorical])
+    testCategorical = catBinarizer.transform(df[categorical])
+
+    # Construct our training and testing data points by concatenating
+    # the categorical features with the continous features
+    testX = np.hstack([testCategorical, testContinuous])
+
+    return (testX)
+
+trainx, testx = utils.patient_dataset_splitter(data, patient_key='patient_TrustNumber')
 y_train = np.array(data['Event'])
 y_test = np.array(df['Event_x'])
 x_train = np.array(process_attributes(data))
-x_test = np.array(process_attributes(df))
+x_test = np.array(process_attribute(df))
 
 # fit Linear model
 lr_model = LogisticRegression()
 lr_model.fit(x_train, y_train)
+print('LR Intercept:', lr_model.intercept_)
+print('LR Coefficient:', lr_model.coef_)
 lr_predict = lr_model.predict(x_test)
 print(lr_predict[:5])
 lr_preds = lr_model.predict_proba(x_test)[:,1]
 print(lr_preds[:5])
 
-print(classification_report(survival_yhat, lr_predict))
+print(classification_report(y_test, lr_predict))
 print('Linear ROCAUC score:',roc_auc_score(y_test, lr_predict))
 print('Linear Accuracy score:',accuracy_score(y_test, lr_predict))
 print('Linear F1 score:',f1_score(y_test, lr_predict))
+print('Linear Precision:',precision_score(y_test, lr_predict))
+print('Linear Recall:',recall_score(y_test, lr_predict))
+
+# zero rule algorithm for classification
+def zero_rule_algorithm_classification(train, test):
+    output_values = [row for row in train]
+    prediction = max(set(output_values), key=output_values.count)
+    predicted = [prediction for i in range(len(test))]
+    return predicted
+test = [None] * len(y_test)
+NIR = zero_rule_algorithm_classification(y_train, test)
+
+# plot confusion matrix
+cm = confusion_matrix(survival_yhat, lr_predict, labels=lr_model.classes_)
+disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=lr_model.classes_)
+disp.plot()
+plt.show()
 
 # Plot ROC
 fpr, tpr, _ = roc_curve(survival_yhat, preds2[:,0])
