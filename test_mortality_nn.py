@@ -159,7 +159,7 @@ plt.show()
 #patient_df = pd.read_csv('/Users/ebrahamalskaf/Documents/patient_info.csv')
 categorical_col_listc = ['Chronic_kidney_disease_(disorder)','Essential_hypertension', 'Gender', 'Heart_failure_(disorder)', 'Smoking_history',
 'Dyslipidaemia', 'Myocardial_infarction_(disorder)', 'Diabetes_mellitus_(disorder)', 'Cerebrovascular_accident_(disorder)']
-numerical_col_listc= ['LVEF_(%)']
+numerical_col_listc= ['Age_on_20.08.2021_x', 'LVEF_(%)']
 
 dir_1 = os.listdir('/Users/ebrahamalskaf/Documents/**PERFUSION_CLASSIFICATION**/STRESS_images')
 dir_2 = os.listdir('/Users/ebrahamalskaf/Documents/**LGE_CLASSIFICATION**/LGE_images')
@@ -206,7 +206,7 @@ def process_attributes(df):
 
 categorical_col_listm = ['Chronic_kidney_disease_(disorder)_x','Essential_hypertension_x', 'Gender_x', 'Heart_failure_(disorder)_x', 'Smoking_history_x',
 'Dyslipidaemia_x', 'Myocardial_infarction_(disorder)_x', 'Diabetes_mellitus_(disorder)_x', 'Cerebrovascular_accident_(disorder)_x']
-numerical_col_listm= ['LVEF_(%)_x']
+numerical_col_listm= ['Age_on_20.08.2021_x_x', 'LVEF_(%)_x']
 
 def process_attribute(df):
     continuous = numerical_col_listm
