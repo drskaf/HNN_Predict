@@ -82,7 +82,6 @@ disp = ConfusionMatrixDisplay(confusion_matrix=cm)
 disp.plot()
 plt.show()
 
-
 # Load trained mixed model
 # Define columns
 categorical_col_listm = ['Chronic_kidney_disease_(disorder)_x','Essential_hypertension_x', 'Gender_x', 'Heart_failure_(disorder)_x', 'Smoking_history_x',
@@ -105,16 +104,7 @@ def process_attributes(df):
 
     return (testX)
 
-#(df1) = load_label_png('/Users/ebrahamalskaf/Documents/**PERFUSION_CLASSIFICATION**/peak_LV_test', patient_df, 224)
-#(df2) = load_lge_data('/Users/ebrahamalskaf/Documents/**LGE_CLASSIFICATION**/lge_test', patient_df, 224)
-#df = df1.merge(df2, on='ID')
-#print(len(df))
-#X_test1 = np.array([x1 for x1 in df['Perf']])
-#X_test2 = np.array([x2 for x2 in df['LGE']])
-#t_aug = ImageDataGenerator(samplewise_center=True,samplewise_std_normalization=True)
-#testX = t_aug.flow(testX, batch_size=1000)
-#testX = testX.next()
-testImageX = testX #np.hstack((X_test1, X_test2)) / 255.0
+testImageX = testX
 
 testAttrX = process_attributes(df)
 testAttrX = np.array(testAttrX)
@@ -246,15 +236,6 @@ print('Linear Accuracy score:',accuracy_score(y_test, lr_predict))
 print('Linear F1 score:',f1_score(y_test, lr_predict))
 print('Linear Precision:',precision_score(y_test, lr_predict))
 print('Linear Recall:',recall_score(y_test, lr_predict))
-
-# zero rule algorithm for classification
-def zero_rule_algorithm_classification(train, test):
-    output_values = [row for row in train]
-    prediction = max(set(output_values), key=output_values.count)
-    predicted = [prediction for i in range(len(test))]
-    return predicted
-test = [None] * len(y_test)
-NIR = zero_rule_algorithm_classification(y_train, test)
 
 # plot confusion matrix
 cm = confusion_matrix(survival_yhat, lr_predict, labels=lr_model.classes_)
